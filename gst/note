@@ -1,0 +1,40 @@
+
+
+-- trứng rồng                                                                       status
+action:
+    chỉ set map point ko set vào map gốc
+        -> giảm số lượng check có thể đi
+
+-- bomb
+action:
+    set vào map gốc vị trí bomb
+        -> tránh lỗi cố tình đi vào bomb/ giảm case
+    set vào map val khoảng cách nổ
+        ->  + bonus point                   ->> val()
+        ->  - heath point                   ->> val()
+
+-- tường gỗ
+action:
+    tính điểm
+        - map point         -> chặn ko cho đi vào ?         => vô nghĩa
+        - bonus point       -> tính hợp lý vị trí bomb      => hợp lý hơn
+
+
+
+-- các thứ khác chặn ko cho di chuyển vào                                              v
+
+
+
+-- có so sánh map cũ với map mới ko?
+=> sol:
+    có: chỉ khi map change mới update point
+    ko:
+
+
+--tìm đường đi đếm trứng gst                                                           ?
+rule: ?
+    bomb trúng trứng địch - điểm hay ăn trứng mình thì win ?
+=> action:
+     tìm trứng địch rồi bomb / tim trứng của mình
+
+
