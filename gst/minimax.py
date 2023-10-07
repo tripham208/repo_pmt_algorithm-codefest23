@@ -1,4 +1,4 @@
-from map_handler import map_copy, POS_PLAYER, POS_ENEMY, NO_LIST
+from gst.handler.map_handler import map_copy, NO_LIST
 
 MAX = 10000000
 MIN = -10000000

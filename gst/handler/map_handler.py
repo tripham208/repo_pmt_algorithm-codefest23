@@ -1,4 +1,4 @@
-from main import PLAYER_ID
+from gst import PLAYER_ID
 
 MAP_DEFAULT = [[1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
                [1, 2, 2, 2, 2, 1, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 1, 2, 0, 0, 0, 1],
@@ -15,7 +15,7 @@ MAP_DEFAULT = [[1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1
                [1, 0, 0, 0, 2, 1, 2, 2, 2, 2, 2, 1, 4, 4, 1, 2, 2, 2, 2, 2, 1, 2, 2, 2, 2, 1],
                [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]]
 
-DELAY_FRAME_TIME = 5
+
 MAP = []
 EVALUATE_MAP_PLAYER = []
 EVALUATE_MAP_ENEMY = []
@@ -69,39 +69,6 @@ def map_copy(current_map):
     return m
 
 
-def ticktack_handler():
-    pass
-
-
-def gen_direction(direction):
-    """
-    1 - Move LEFT \n
-    2 - Move RIGHT.\n
-    3 - Move UP\n
-    4 - Move DOWN\n
-    b - Drop BOMB\n
-    x - Stop Moving\n
-    :param direction:
-    :return:
-    """
-    output = ""
-    for i in direction:
-        match i:
-            case [0, -1]:
-                output += '1'
-            case [0, 1]:
-                output += '2'
-            case [-1, 0]:
-                output += '3'
-            case [1, 0]:
-                output += '4'
-            case [0, 0]:
-                output += 'x'
-            case [1, 1]:
-                output += 'b'
-    return output
-
-
 def paste_base_map(data):
     """first handle ticktack"""
     global COLS
@@ -124,13 +91,12 @@ def paste_player_data(players):
     global EF_PLAYER
     global EF_ENEMY
     for player in players:
-        match player["id"]:
-            case "player1-xxx":  # todo common player id
-                POS_PLAYER = [player["currentPosition"]["row"], player["currentPosition"]["col"]]
-                EF_PLAYER["power"] = player["power"]
-            case "player2-xxx":
-                POS_ENEMY = [player["currentPosition"]["row"], player["currentPosition"]["col"]]
-                EF_ENEMY["power"] = player["power"]
+        if player["id"] == PLAYER_ID:
+            POS_PLAYER = [player["currentPosition"]["row"], player["currentPosition"]["col"]]
+            EF_PLAYER["power"] = player["power"]
+        else:
+            POS_ENEMY = [player["currentPosition"]["row"], player["currentPosition"]["col"]]
+            EF_ENEMY["power"] = player["power"]
 
 
 def paste_update_map(data):
@@ -187,8 +153,6 @@ def point(player, obj) -> int:
             return -200
                 case [1, 3]:
             return 300
-            
-        p
    
 '''
 
