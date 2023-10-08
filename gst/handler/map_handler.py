@@ -15,7 +15,6 @@ MAP_DEFAULT = [[1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1
                [1, 0, 0, 0, 2, 1, 2, 2, 2, 2, 2, 1, 4, 4, 1, 2, 2, 2, 2, 2, 1, 2, 2, 2, 2, 1],
                [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]]
 
-
 MAP = []
 EVALUATE_MAP_PLAYER = []
 EVALUATE_MAP_ENEMY = []
@@ -29,10 +28,12 @@ POS_ENEMY = [5, 15]
 BOMBS = []
 SPOILS = []
 EF_PLAYER = {
-    "power": 1
+    "power": 1,
+    "lives": 3
 }
 EF_ENEMY = {
-    "power": 1
+    "power": 1,
+    "lives": 3
 }
 
 NO_LIST = [1, 2, 3, 11, 16]
@@ -44,12 +45,15 @@ NO_LIST = [1, 2, 3, 11, 16]
 4 - A Quarantine Place \n
 5 - A Dragon Egg GST\n
 
-11 - BOMB \n
-16 - 
+11 - Bomb \n
+16 - Mystic egg
 """
 
+LV1 = [[0, -1], [1, 0], [0, 1], [-1, 0]]
+LV2 = [[0, -1], [1, 0], [0, 1], [-1, 0], [0, -2], [2, 0], [0, 2], [-2, 0]]
+LV3 = [[0, -1], [1, 0], [0, 1], [-1, 0], [0, -2], [2, 0], [0, 2], [-2, 0], [0, -3], [3, 0], [0, 3], [-3, 0]]
 
-# todo
+
 #
 #
 #
@@ -60,13 +64,6 @@ def mock_default():
         MAP.append(i.copy())
         EVALUATE_MAP_PLAYER.append(i.copy())
         EVALUATE_MAP_ENEMY.append(i.copy())
-
-
-def map_copy(current_map):
-    m = []
-    for i in current_map:
-        m.append(i.copy())
-    return m
 
 
 def paste_base_map(data):
@@ -80,8 +77,9 @@ def paste_base_map(data):
     ROWS = data["map_info"]["size"]["rows"]
     MAP = data["map_info"]["map"]
     paste_player_data(players=data["map_info"]["players"])
-    EVALUATE_MAP_PLAYER = data["map_info"]["map"]
-    EVALUATE_MAP_ENEMY = data["map_info"]["map"]
+    # EVALUATE_MAP_PLAYER = data["map_info"]["map"]
+    # EVALUATE_MAP_ENEMY = data["map_info"]["map"]
+    reset_point_map()
     replace_point_map(MAP)
 
 
@@ -94,9 +92,11 @@ def paste_player_data(players):
         if player["id"] == PLAYER_ID:
             POS_PLAYER = [player["currentPosition"]["row"], player["currentPosition"]["col"]]
             EF_PLAYER["power"] = player["power"]
+            EF_PLAYER["lives"] = player["lives"]
         else:
             POS_ENEMY = [player["currentPosition"]["row"], player["currentPosition"]["col"]]
             EF_ENEMY["power"] = player["power"]
+            EF_ENEMY["lives"] = player["lives"]
 
 
 def paste_update_map(data):
@@ -108,22 +108,20 @@ def paste_update_map(data):
     SPOILS = data["map_info"]["spoils"]
     paste_player_data(players=data["map_info"]["players"])
     replace_point_map(current_map=data["map_info"]["map"]),
+    reset_point_map()
     MAP = data["map_info"]["map"]
 
 
-def set_spoil():  # todo add spoil to map? then set point / NO -> keep map and just set point
+def set_spoil():
     global EVALUATE_MAP_PLAYER
     global EVALUATE_MAP_ENEMY
     for spoil in SPOILS:
         if spoil["spoil_type"] in [3, 4, 5]:  # type egg can use
             EVALUATE_MAP_PLAYER[spoil["row"]][spoil["col"]] = 200
             EVALUATE_MAP_ENEMY[spoil["row"]][spoil["col"]] = -200
-        # sử dụng khi cho phép ăn trứng mystic
         # todo : + point thêm trên đường?
-        """
         else:
-            EVALUATE_MAP_PLAYER[spoil["row"]][spoil["col"]] = -500
-        """
+            MAP[spoil["row"]][spoil["col"]] = 16  # lock map
 
 
 def show_map_info():
@@ -172,22 +170,19 @@ def set_bomb_point(power, bomb):
     global EVALUATE_MAP_ENEMY
     global MAP
 
-    lv1 = [[0, -1], [1, 0], [0, 1], [-1, 0]]
-    lv2 = [[0, -1], [1, 0], [0, 1], [-1, 0], [0, -2], [2, 0], [0, 2], [-2, 0]]
-    lv3 = [[0, -1], [1, 0], [0, 1], [-1, 0], [0, -2], [2, 0], [0, 2], [-2, 0], [0, -3], [3, 0], [0, 3], [-3, 0]]
-    MAP[bomb["row"]][bomb["col"]] = 11
+    MAP[bomb["row"]][bomb["col"]] = 11  # lock map
     # todo :handle time
     match power:
         case 1:
-            for i in lv1:
+            for i in LV1:
                 EVALUATE_MAP_PLAYER[bomb["row"] + i[0]][bomb["col"] + i[1]] = -500
                 EVALUATE_MAP_ENEMY[bomb["row"] + i[0]][bomb["col"] + i[1]] = 500
         case 2:
-            for i in lv2:
+            for i in LV2:
                 EVALUATE_MAP_PLAYER[bomb["row"] + i[0]][bomb["col"] + i[1]] = -500
                 EVALUATE_MAP_ENEMY[bomb["row"] + i[0]][bomb["col"] + i[1]] = 500
         case 3:
-            for i in lv3:
+            for i in LV3:
                 EVALUATE_MAP_PLAYER[bomb["row"] + i[0]][bomb["col"] + i[1]] = -500
                 EVALUATE_MAP_ENEMY[bomb["row"] + i[0]][bomb["col"] + i[1]] = 500
 
@@ -197,12 +192,14 @@ def replace_point_map(current_map: list[list], first=False):
     global EVALUATE_MAP_ENEMY
     global BOMBS
     if first:
+        '''
         for row in range(ROWS):
             for col in range(COLS):
                 EVALUATE_MAP_PLAYER[row][col] = point(1, current_map[row][col])
-                EVALUATE_MAP_ENEMY[row][col] = point(2, current_map[row][col])
+                EVALUATE_MAP_ENEMY[row][col] = point(2, current_map[row][col])'''
         set_addition_point()
     else:
+        '''
         for row in range(ROWS):
             for col in range(COLS):
                 # only map change update point todo: check this
@@ -211,8 +208,15 @@ def replace_point_map(current_map: list[list], first=False):
                     pass
                 else:
                     EVALUATE_MAP_PLAYER[row][col] = point(1, current_map[row][col])
-                    EVALUATE_MAP_ENEMY[row][col] = point(2, current_map[row][col])
+                    EVALUATE_MAP_ENEMY[row][col] = point(2, current_map[row][col])'''
         set_addition_point()
+
+
+def reset_point_map():
+    global EVALUATE_MAP_ENEMY
+    global EVALUATE_MAP_PLAYER
+    EVALUATE_MAP_PLAYER = [[0] * COLS] * ROWS
+    EVALUATE_MAP_ENEMY = [[0] * COLS] * ROWS
 
 
 def set_addition_point():
@@ -223,6 +227,7 @@ def set_addition_point():
 # todo: val function handle bomb + point replace point from map but how to point + khi nổ thùng vs đứng trong bom
 
 """
--- code replaced
+    NOTE
+- cmt code map -> point map
 
 """

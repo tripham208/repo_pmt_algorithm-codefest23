@@ -38,3 +38,8 @@ rule: ?
      tìm trứng địch rồi bomb / tim trứng của mình
 
 
+
+
+--note feature
+
+8/10: frame delay = 5  => nếu đã có bomb thì skip case đặt bom

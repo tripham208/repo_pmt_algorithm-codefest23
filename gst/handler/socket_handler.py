@@ -1,6 +1,6 @@
-from gst import JOIN_GAME_EVENT, TICKTACK_EVENT, paste_base_map, paste_update_map, DRIVE_EVENT, \
-    ENEMY_ID, URL
+from gst import JOIN_GAME_EVENT, TICKTACK_EVENT, DRIVE_EVENT, ENEMY_ID, URL
 from gst.handler import sio, DELAY_FRAME_TIME
+from gst.handler.map_handler import paste_base_map, paste_update_map
 
 
 @sio.event
