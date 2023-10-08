@@ -12,6 +12,7 @@ action:
     set vào map val khoảng cách nổ
         ->  + bonus point                   ->> val()
         ->  - heath point                   ->> val()
+    bomb bị tường chặn                                                                  v
 
 -- tường gỗ
 action:
@@ -43,3 +44,30 @@ rule: ?
 --note feature
 
 8/10: frame delay = 5  => nếu đã có bomb thì skip case đặt bom
+
+
+
+
+--issue:
+    match độ sâu
+        -> ko get đc => hard code số cụ thể  => if else
+    save đường đi tránh lặp lại
+        -> set theo step gặp vấn đề replace khi value ko match với step truoc
+            -> ko có đích nên khi quay lui ghi đè
+    map trong minimax:
+        -> hiện tại vị trí nhân vật/bomb lưu riêng => ko thay đổi map
+            -> việc clone map ko cần thiết
+
+
+-- Guideline:
+    join game: replace game info in gst/init => bỏ vì không thể sửa global var từ file khác
+    1 file duy nhất  all pro
+
+todo : check lại hết case di chuyển có đi vào ô đặt bomb ko (ko phải ô range nổ)
+
+
+
+todo: case clear 1 nửa
+
+- astar
+- dẫm bombs :)

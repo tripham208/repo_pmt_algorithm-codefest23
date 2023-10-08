@@ -1,5 +1,5 @@
-URL = 'http://localhost:1563/'
-GAME_ID = "e29ada20-3d73-4ff2-90ac-f7ca3c68cee6"
+URL = 'http://localhost:1543/'
+GAME_ID = "292e6dc2-2794-413b-80af-6d9f5a061212"
 PLAYER_ID = "player1-xxx"
 ENEMY_ID = "player2-xxx"
 
