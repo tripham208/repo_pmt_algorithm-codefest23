@@ -11,33 +11,20 @@ from gst.model.position import Position
 
 # global var
 URL = 'http://localhost:1543/'
-GAME_ID = "32d8754a-9835-4052-98aa-8aa805e273a0"
+GAME_ID = "0c8546f6-d767-4632-a4b2-80ff62c553db"
 PLAYER_ID = "player1-xxx"
 ENEMY_ID = "player2-xxx"
 
 JOIN_GAME_EVENT = 'join game'
 TICKTACK_EVENT = "ticktack player"
 DRIVE_EVENT = "drive player"
-DELAY_FRAME_TIME = 5
+DELAY_FRAME_TIME = 4
 
 sio = socketio.Client()
 
 # map handler
 
-MAP_DEFAULT = [[1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
-               [1, 2, 2, 2, 2, 1, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 1, 2, 0, 0, 0, 1],
-               [1, 2, 5, 2, 2, 1, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 1, 2, 0, 3, 0, 1],
-               [1, 2, 2, 2, 2, 1, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 1, 2, 0, 0, 0, 1],
-               [1, 2, 2, 2, 2, 1, 2, 2, 2, 1, 1, 1, 2, 2, 2, 2, 2, 2, 2, 2, 1, 2, 2, 2, 1, 1],
-               [1, 2, 2, 0, 0, 0, 0, 2, 0, 1, 0, 1, 0, 0, 0, 0, 0, 2, 0, 2, 0, 0, 0, 2, 2, 1],
-               [1, 2, 2, 0, 0, 0, 0, 2, 0, 1, 0, 1, 0, 0, 0, 0, 0, 2, 0, 2, 0, 0, 0, 2, 2, 1],
-               [1, 2, 2, 0, 0, 0, 0, 2, 0, 1, 0, 1, 0, 0, 0, 0, 0, 2, 0, 2, 0, 0, 0, 2, 2, 1],
-               [1, 2, 2, 0, 0, 0, 0, 2, 0, 1, 1, 1, 0, 0, 0, 0, 0, 2, 0, 2, 0, 0, 0, 2, 2, 1],
-               [1, 1, 1, 2, 2, 1, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 1, 2, 2, 2, 2, 1],
-               [1, 0, 0, 0, 2, 1, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 1, 2, 2, 2, 2, 1],
-               [1, 0, 3, 0, 2, 1, 2, 2, 2, 2, 2, 1, 1, 1, 1, 2, 2, 2, 2, 2, 1, 2, 2, 5, 2, 1],
-               [1, 0, 0, 0, 2, 1, 2, 2, 2, 2, 2, 1, 4, 4, 1, 2, 2, 2, 2, 2, 1, 2, 2, 2, 2, 1],
-               [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]]
+MAP_DEFAULT = []
 
 MAP = []
 EVALUATE_MAP_PLAYER = []
@@ -49,8 +36,8 @@ ROWS = 0
 POS_PLAYER = []  # [5, 10]  # row - col
 POS_ENEMY = []  # [5, 15]
 
-POS_PLAYER_EGG = [5, 10]  # row - col
-POS_ENEMY_EGG = [5, 15]
+POS_PLAYER_EGG = []  # row - col
+POS_ENEMY_EGG = []
 
 BOMB_PLAYER_ENABLE = False
 BOMB_ENEMY_ENABLE = False
@@ -100,16 +87,6 @@ ZONE_CLEAN = [0, 0, 0, 0]
 #
 #
 #
-
-
-def mock_default():
-    for i in MAP_DEFAULT:
-        MAP.append(i.copy())
-        EVALUATE_MAP_PLAYER.append(i.copy())
-        EVALUATE_MAP_ENEMY.append(i.copy())
-        EVALUATE_MAP_ROAD.append(i.copy())
-    replace_point_map()
-
 
 def paste_base_map(data):
     """
@@ -200,10 +177,6 @@ def paste_update_map(data):
     # show_map(EVALUATE_MAP_PLAYER)
 
 
-def tee():
-    print("col - row", COLS, ROWS, POS_PLAYER, POS_ENEMY)
-
-
 def set_spoil():
     global EVALUATE_MAP_PLAYER
     global EVALUATE_MAP_ENEMY
@@ -222,33 +195,6 @@ def set_spoil():
         else:
             EVALUATE_MAP_PLAYER[spoil["row"]][spoil["col"]] = -200
             # MAP[spoil["row"]][spoil["col"]] = 16  # lock map
-
-
-def point(player, obj) -> int:
-    """
-    set point theo player/obj ngoại trừ trứng
-    :param player:
-    1: player
-    2: enemy
-    :param obj:
-    :return:
-    """
-    match [player, obj]:
-        case _:
-            return 0
-
-
-'''    
-        move map point => bonus point
-
-        case [1, 2]:
-            return 200
-        case [2, 2]:
-            return -200
-                case [1, 3]:
-            return 300
-
-'''
 
 
 def set_bomb():
@@ -407,11 +353,14 @@ def emit_direction(direction):
 def ticktack_handler(data):
     global BOMB_DANGER_POS
     print(data["id"], "-", data["tag"])
+    BOMB_DANGER_POS = get_list_pos_bomb_danger(data["map_info"]["bombs"])  # update liên tục
+    """
+    #update theo tag
     match data["tag"]:
         case "bomb:explosed":
             BOMB_DANGER_POS = get_list_pos_bomb_danger(data["map_info"]["bombs"])
         case "bomb:setup":
-            BOMB_DANGER_POS = get_list_pos_bomb_danger(data["map_info"]["bombs"])
+            BOMB_DANGER_POS = get_list_pos_bomb_danger(data["map_info"]["bombs"])"""
     # print(BOMB_DANGER_POS)
     match data["id"]:
         case 1:
@@ -435,13 +384,14 @@ def ticktack_handler(data):
 
 
 def get_case_action() -> int:
-    if is_save_zone():
+    if  True: #is_save_zone():
         # show_map(EVALUATE_MAP_ROAD)
         # show_map(EVALUATE_MAP_PLAYER)
-        print(POS_PLAYER, ":", EVALUATE_MAP_ROAD[POS_PLAYER[0]][POS_PLAYER[1]])
-        if EVALUATE_MAP_ROAD[POS_PLAYER[0]][POS_PLAYER[1]] >= 25:
+        val_pos = EVALUATE_MAP_ROAD[POS_PLAYER[0]][POS_PLAYER[1]]
+        print("pos", POS_PLAYER, "point :", val_pos)
+        if val_pos != 0:
             return 1
-        elif EVALUATE_MAP_ROAD[POS_PLAYER[0]][POS_PLAYER[1]] < 25:
+        elif val_pos == 0:
             return 2
     else:
         return 3
@@ -759,7 +709,7 @@ def next_pos_bfs(actions, cr_status, pos_list, size_map, hz, e_zone, queue: list
         # continue
 
         point = EVALUATE_MAP_ROAD[new_pos_player[0]][new_pos_player[1]]
-        #print("700", cr_status, "->", new_pos_player, point, pos_list)
+        # print("700", cr_status, "->", new_pos_player, point, pos_list)
         if point >= 25 and not is_danger_bombs(new_pos_player, BOMBS):
             end_status = deepcopy(cr_status)
             end_status[1].append(act)
@@ -884,6 +834,8 @@ def get_list_pos_bomb_danger(bombs):
     list_pos = []
     for bomb in bombs:
         print("870", bomb)
+        if bomb["remainTime"] > 1300:
+            continue
         if bomb["playerId"] == PLAYER_ID:
             list_pos += list_pos_bomb(EF_PLAYER["power"], bomb)
         else:

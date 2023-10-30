@@ -33,4 +33,4 @@
 ## !!! issue
     1:  do emit các event thi mà action trc đó chưa kết thúc sẽ bị ghi đè action khác => dễ đi vào bomb
         => check lại các điều kiện di chuyển , delay frame 
-    
+    2:  set time < x thì lock nhưng khi bomb nổ => unlock => tia lửa chưa end đã di chuyển qua
