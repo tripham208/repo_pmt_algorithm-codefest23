@@ -4,27 +4,25 @@ from typing import Any
 import socketio
 
 from gst.handler import show_map
-from gst.model.const import NextMoveZone, BombRange, get_move_in_zone, get_action_in_zone
+from gst.model.const import NextMoveZone, BombRange, get_move_in_zone, get_action_in_zone, get_action_out_zone, \
+    get_move_out_zone
 import math as m
 
 from gst.model.position import Position
+
 # global var
 URL = 'http://localhost:1543/'
-GAME_ID = "eeec3b93-24e7-4d78-94e1-65846b0381c8"
+GAME_ID = "7e0f1224-45a1-4c67-a913-32f5d05f2493"
 PLAYER_ID = "player1-xxx"
 ENEMY_ID = "player2-xxx"
 
 JOIN_GAME_EVENT = 'join game'
 TICKTACK_EVENT = "ticktack player"
 DRIVE_EVENT = "drive player"
-DELAY_FRAME_TIME = 4
 
 sio = socketio.Client()
 
 # map handler
-
-MAP_DEFAULT = []
-
 MAP = []
 EVALUATE_MAP_PLAYER = []
 EVALUATE_MAP_ENEMY = []
@@ -38,24 +36,31 @@ POS_ENEMY = []  # [5, 15]
 POS_PLAYER_EGG = []  # row - col
 POS_ENEMY_EGG = []
 
+BOMB_PLAYER_MUL_ENABLE = False
 BOMB_PLAYER_ENABLE = False
 BOMB_ENEMY_ENABLE = False
 BOMB_DANGER_POS = []
 BOMBS = []
+BOMBS_ = []  # bomb sawp
+BOMBS_L2 = []  # bomb sawp
+
 SPOILS = []
 SPOILS_POS = []
 EF_PLAYER = {
     "power": 1,
-    "lives": 1000
+    "lives": 1000,
+    "dragonEggDelay": 0,
 }
 EF_ENEMY = {
     "power": 1,
     "lives": 3
 }
 
-NO_LIST = [1, 2, 3, 5, 11, 16]
+NO_LIST_MAX = [1, 2, 5, 11]
 
-NO_DESTROY_LIST = [1, 3]
+NO_LIST_BFS = [1, 2, 3, 5, 11]
+
+NO_DESTROY_LIST = [1, 3, 5]
 """
 0 - A Road \n
 1 - A Wall (None destructible cell)\n
@@ -67,20 +72,6 @@ NO_DESTROY_LIST = [1, 3]
 11 - Bomb \n
 16 - Mystic egg - change in set spoil
 """
-
-NO_LIST_M = [1, 2, 3, 11]
-"""
-0 - A Road \n
-1 - A Wall (None destructible cell)\n
-2 - A Balk (Destructible cell)\n
-3 - A Teleport Gate\n
-4 - A Quarantine Place \n
-5 - A Dragon Egg GST\n
-
-11 - Bomb \n
-"""
-
-ZONE_CLEAN = [0, 0, 0, 0]
 
 
 #
@@ -128,10 +119,12 @@ def paste_player_data(players):
     global POS_ENEMY
     global EF_PLAYER
     global EF_ENEMY
+    global BOMB_PLAYER_MUL_ENABLE
     for player in players:
         if player["id"] == PLAYER_ID:
             POS_PLAYER = [player["currentPosition"]["row"], player["currentPosition"]["col"]]
             EF_PLAYER["power"] = player["power"]
+            EF_PLAYER["dragonEggDelay"] = player["dragonEggDelay"]
             if player["lives"] == EF_PLAYER["lives"] - 1:
                 print(
                     f"------------------{player['lives']}----------------------{EF_PLAYER['lives'] - 1}---------------")
@@ -140,6 +133,9 @@ def paste_player_data(players):
             POS_ENEMY = [player["currentPosition"]["row"], player["currentPosition"]["col"]]
             EF_ENEMY["power"] = player["power"]
             EF_ENEMY["lives"] = player["lives"]
+    if not BOMB_PLAYER_MUL_ENABLE:
+        if EF_PLAYER["dragonEggDelay"] >= 4:
+            BOMB_PLAYER_MUL_ENABLE = True
 
 
 def paste_update_map(data):
@@ -168,13 +164,11 @@ def paste_update_map(data):
     SPOILS = data["map_info"]["spoils"]
     paste_player_data(players=data["map_info"]["players"])
     paste_gst_egg(eggs=data["map_info"]["dragonEggGSTArray"])
-    # tee()
     MAP = data["map_info"]["map"]
     reset_point_map()
     # show_map(EVALUATE_MAP_ROAD)
     # show_map(EVALUATE_MAP_PLAYER)
     replace_point_map()
-
     # show_map(EVALUATE_MAP_ROAD)
     # show_map(EVALUATE_MAP_PLAYER)
 
@@ -189,13 +183,13 @@ def set_spoil():
         if spoil["spoil_type"] in [3, 4, 5]:  # type egg can use
             EVALUATE_MAP_PLAYER[spoil["row"]][spoil["col"]] = 200
             EVALUATE_MAP_ENEMY[spoil["row"]][spoil["col"]] = -200
-            EVALUATE_MAP_ROAD[spoil["row"]][spoil["col"]] += 50
+            EVALUATE_MAP_ROAD[spoil["row"]][spoil["col"]] = 50
             SPOILS_POS.append([spoil["row"], spoil["col"]])
-            for i in BombRange.LV1.value:  # ko phải bomb nổ :  khoảng cách  =1
-                # a.append([EVALUATE_MAP_ROAD[row + i[0]][col + i[1]], i])
-                EVALUATE_MAP_ROAD[spoil["row"] + i[0]][spoil["col"] + i[1]] += 50
+            # for i in BombRange.LV1.value:  # ko phải bomb nổ :  khoảng cách  =1
+            # a.append([EVALUATE_MAP_ROAD[row + i[0]][col + i[1]], i])
+            # EVALUATE_MAP_ROAD[spoil["row"] + i[0]][spoil["col"] + i[1]] += 50
         else:
-            EVALUATE_MAP_PLAYER[spoil["row"]][spoil["col"]] = -200
+            EVALUATE_MAP_PLAYER[spoil["row"]][spoil["col"]] = 0
             # MAP[spoil["row"]][spoil["col"]] = 16  # lock map
 
 
@@ -216,22 +210,24 @@ def set_bomb_point(power, bomb):
     global MAP
 
     MAP[bomb["row"]][bomb["col"]] = 11  # lock map
-    EVALUATE_MAP_PLAYER[bomb["row"]][bomb["col"]] = -500
-    EVALUATE_MAP_ROAD[bomb["row"]][bomb["col"]] = -500
+    EVALUATE_MAP_PLAYER[bomb["row"]][bomb["col"]] = -DANGER_POINT
+    EVALUATE_MAP_ROAD[bomb["row"]][bomb["col"]] = -DANGER_POINT
     EVALUATE_MAP_ENEMY[bomb["row"]][bomb["col"]] = 500
 
-    # todo :handle time
+    # handle time => time có thể đi qua
     # handle bomb bị tường chặn => done
     match power:
         case 1:
             for i in BombRange.LV1.value:
-                EVALUATE_MAP_PLAYER[bomb["row"] + i[0]][bomb["col"] + i[1]] = -500
-                EVALUATE_MAP_ROAD[bomb["row"] + i[0]][bomb["col"] + i[1]] = -500
+                EVALUATE_MAP_PLAYER[bomb["row"] + i[0]][bomb["col"] + i[1]] = -DANGER_POINT
+                EVALUATE_MAP_ROAD[bomb["row"] + i[0]][bomb["col"] + i[1]] = -DANGER_POINT
                 EVALUATE_MAP_ENEMY[bomb["row"] + i[0]][bomb["col"] + i[1]] = 500
         case 2:
             bomb_point_with_lv(bomb, BombRange.LV2.value)
         case 3:
             bomb_point_with_lv(bomb, BombRange.LV3.value)
+        case 4:
+            bomb_point_with_lv(bomb, BombRange.LV4.value)
 
 
 def bomb_point_with_lv(bomb, bomb_range) -> int:
@@ -245,9 +241,9 @@ def bomb_point_with_lv(bomb, bomb_range) -> int:
             if MAP[bomb["row"] + j[0]][bomb["col"] + j[1]] == 1:
                 continue
             else:
-                EVALUATE_MAP_PLAYER[bomb["row"] + j[0]][bomb["col"] + j[1]] = -500
+                EVALUATE_MAP_PLAYER[bomb["row"] + j[0]][bomb["col"] + j[1]] = -DANGER_POINT
                 EVALUATE_MAP_ENEMY[bomb["row"] + j[0]][bomb["col"] + j[1]] = 500
-                EVALUATE_MAP_ROAD[bomb["row"] + j[0]][bomb["col"] + j[1]] = -500
+                EVALUATE_MAP_ROAD[bomb["row"] + j[0]][bomb["col"] + j[1]] = -DANGER_POINT
     return value
 
 
@@ -262,7 +258,7 @@ def replace_point_map():
                 # show_map(EVALUATE_MAP_ROAD)
                 for i in BombRange.LV1.value:  # ko phải bomb nổ :  khoảng cách  =1
                     # a.append([EVALUATE_MAP_ROAD[row + i[0]][col + i[1]], i])
-                    EVALUATE_MAP_ROAD[row + i[0]][col + i[1]] += 25
+                    EVALUATE_MAP_ROAD[row + i[0]][col + i[1]] = 25
                     # a.append([row + i[0], col + i[1], EVALUATE_MAP_ROAD[row + i[0]][col + i[1]]])
                 # print(a)
                 '''
@@ -352,53 +348,59 @@ def emit_direction(direction):
     })
 
 
+TIME_POINT = 0
+DELAY_FRAME_TIME = 3  # 4
+ACTION_PER_POINT = 2
+RANGE_TIME = 300
+
+
 def ticktack_handler(data):
     global BOMB_DANGER_POS
-    print(data["id"], "-", data["tag"])
+    global TIME_POINT
+    print(data["id"], "-", data["tag"], "-", data["timestamp"], "-", TIME_POINT)
 
-    BOMB_DANGER_POS = get_list_pos_bomb_danger(data["map_info"]["bombs"])  # update liên tục
-    """
-    #update theo tag
-    match data["tag"]:
-        case "bomb:explosed":
-            BOMB_DANGER_POS = get_list_pos_bomb_danger(data["map_info"]["bombs"])
-        case "bomb:setup":
-            BOMB_DANGER_POS = get_list_pos_bomb_danger(data["map_info"]["bombs"])"""
-    # print(BOMB_DANGER_POS)
+    print("pos now", data["map_info"]["players"][0]["currentPosition"],
+          data["map_info"]["players"][1]["currentPosition"])
+    paste_update_map(data)
     match data["id"]:
         case 1:
             paste_base_map(data)
-        case x if x % DELAY_FRAME_TIME == 0:
-            paste_update_map(data)
+        case _:
+            if data["timestamp"] - TIME_POINT >= RANGE_TIME:
+                TIME_POINT = data["timestamp"]
+                BOMB_DANGER_POS = get_list_pos_bomb_danger(data["map_info"]["bombs"])  # update liên tục
+                paste_update_map(data)
 
-            print("col - row", COLS, ROWS, POS_PLAYER, POS_ENEMY)
-            action_case = get_case_action()
+                action_case = get_case_action()
 
-            action = get_action(case=action_case)
-            print(action_case, action)
-            if action_case == 2 and action == []:
-                print("find egg")
-                action = get_action(case=5)
-            print("action:", action)
-            direction = gen_direction(action)
-            print("direction:", direction)
+                action = get_action(case=action_case)
+                print(action_case, action)
+                if action_case == 2 and action == []:
+                    print("find egg")
+                    action = get_action(case=5)
+                print("action:", action)
+                action = action[0:ACTION_PER_POINT]
+                direction = gen_direction(action)
+                print("direction:", direction)
 
-            emit_direction(direction)
+                emit_direction(direction)
 
 
 def get_case_action() -> int:
-    if True:  # is_save_zone():
-        # show_map(EVALUATE_MAP_ROAD)
-        # show_map(EVALUATE_MAP_PLAYER)
-        val_pos = EVALUATE_MAP_ROAD[POS_PLAYER[0]][POS_PLAYER[1]]
-        print("pos", POS_PLAYER, "point :", val_pos)
-        if val_pos != 0:
-            return 1
-        elif val_pos == 0:
-            return 2
-    else:
-        return 3
-    return 1
+    val_pos = EVALUATE_MAP_ROAD[POS_PLAYER[0]][POS_PLAYER[1]]
+    print("pos", POS_PLAYER, "point :", val_pos)
+    if bfs_f(POS_PLAYER, [ROWS, COLS]):
+        print("case 1")
+        return 1
+    if euclid_distance(POS_ENEMY, POS_PLAYER) <= 4:
+        print("case 2")
+        return 1
+    if val_pos != 0:
+        print("case 3")
+        return 1
+    elif val_pos == 0:
+        print("case 4")
+        return 2
 
 
 # action handler
@@ -437,7 +439,10 @@ def get_status_bomb():
     e = True
     for bomb in BOMBS:
         if bomb["playerId"] == PLAYER_ID:
-            p = False
+            if not BOMB_PLAYER_MUL_ENABLE:
+                p = False
+            elif bomb["remainTime"] > 800:
+                p = False
         else:
             e = False
     return p, e
@@ -445,10 +450,10 @@ def get_status_bomb():
 
 def get_action(case) -> list:
     """
-    1 -> action no e (road point >=25) \n
+    1 -> action no e \n
     2 -> find pos bomb \n
-    3 -> action ab
-    5 -> find egg enemy
+    3 -> action ab \n
+    5 -> find egg enemy \n
     6 -> find egg player
     :param case:
     :return:
@@ -480,31 +485,7 @@ def get_action(case) -> list:
                 p_zone=is_zone(pos=POS_PLAYER, size=size),
                 e_zone=is_zone(pos=POS_ENEMY, size=size)
             )
-        case 3:
-
-            return minimax_no_e(
-                position=Position(
-                    pos_player=POS_PLAYER,
-                    pos_enemy=POS_ENEMY,
-                    bomb_player=p,
-                    bomb_enemy=e,
-                    bombs=BOMBS
-                ),
-                zone=zone
-            )
-            """
-            return minimax_ab(
-                position=Position(
-                    pos_player=POS_PLAYER,
-                    pos_enemy=POS_ENEMY,
-                    bomb_player=p,
-                    bomb_enemy=e,
-                    bombs=BOMBS
-                )
-            )"""
-
         case 5:
-
             return a_star(
                 start=POS_PLAYER,
                 target=POS_ENEMY_EGG
@@ -567,36 +548,11 @@ def check_half_zone(p_zone, e_zone):
 
 def is_save_zone():
     global POS_PLAYER
-    # print(POS_PLAYER)
-    # zp = is_zone(POS_PLAYER, [ROWS, COLS])
-    # ze = is_zone(POS_ENEMY, [ROWS, COLS])
     if euclid_distance(POS_ENEMY, POS_PLAYER) >= 4:
         return True
     else:
         return False
 
-
-def is_odd(n) -> bool:
-    return n % 2 == 1
-
-
-def change_haft_zone(h_zone, e_zone):
-    """
-
-    :param h_zone:
-    :param e_zone:
-    :return: target zone
-    """
-    match [h_zone, e_zone]:
-        case [1, 3]:
-            return 4
-        case [1, 4]:
-            return 1
-        case [2, 3]:
-            return 3
-
-
-# todo : check zone
 
 def check_zone_clean_balk(size: list, zone):
     p1 = m.floor(size[0] / 2)
@@ -628,14 +584,14 @@ def check_zone_clean_balk(size: list, zone):
 # a star
 
 def a_star(start, target):
-    # print(start, target)
+    print(start, target)
     queue = [[start, euclid_distance(start, target), [start], []]]  # pos , dis, pos_list, act_list
     lock_list = [start]  # lọc lặp
 
     while queue:
         cr_status = queue.pop(0)
-        # print(cr_status)
-        if cr_status[0] == target:
+        print(cr_status)
+        if cr_status[1] == 1:
             return cr_status[3]
         for act in NextMoveZone.Z4.value:
             new_pos_player = [sum(i) for i in zip(cr_status[0], act)]
@@ -656,7 +612,7 @@ def a_star(start, target):
             new_status[2].append(new_pos_player)
             new_status[3].append(act)
 
-            # print(cr_status[0], "=>", new_pos_player)
+            print(cr_status[0], "=>", new_pos_player)
 
             queue.append(new_status)
 
@@ -667,11 +623,9 @@ def a_star(start, target):
 
 
 # bfs
-
-
 def bfs(start: list, size_map: list, p_zone: int, e_zone: int, hz=None):
     pos_list = [start]  # lọc lặp
-    actions = get_move_in_zone(p_zone)
+    actions = get_move_out_zone(p_zone)
     if hz is None:
         hz, _ = check_half_zone(p_zone, e_zone)
     # print("hz", hz)
@@ -686,25 +640,26 @@ def bfs(start: list, size_map: list, p_zone: int, e_zone: int, hz=None):
             # print("return", end_status[1])
             act_list = end_status[1]
     finally:
-        return act_list[0:4]
+        return act_list
 
 
 def next_pos_bfs(actions, cr_status, pos_list, size_map, hz, e_zone, queue: list):
     for act in actions:
         new_pos_player = [sum(i) for i in zip(cr_status[0], act)]
-        #print("line 700", cr_status, "->", new_pos_player)
+        # print("line 630", cr_status, "->", new_pos_player)
         if new_pos_player in pos_list:
             continue
-        if MAP[new_pos_player[0]][new_pos_player[1]] in NO_LIST:
-            # print("wall")
+        if MAP[new_pos_player[0]][new_pos_player[1]] in NO_LIST_BFS:
+            # print("line 645", new_pos_player, MAP[new_pos_player[0]][new_pos_player[1]])
             continue
         if new_pos_player in BOMB_DANGER_POS:
             continue
-
+        if new_pos_player == POS_ENEMY:
+            continue
         z, _ = check_half_zone(is_zone(cr_status[0], [ROWS, COLS]), e_zone)
         pz, ez = is_zone(cr_status[0], [ROWS, COLS]), is_zone(POS_ENEMY, [ROWS, COLS])
-        if pz == ez:
-            continue
+        # if pz == ez: #todo check laij ddoan nay
+        #   continue
 
         # print(z, hz)
         # if hz != z:  # zone  block
@@ -712,13 +667,13 @@ def next_pos_bfs(actions, cr_status, pos_list, size_map, hz, e_zone, queue: list
         # continue
 
         point = EVALUATE_MAP_ROAD[new_pos_player[0]][new_pos_player[1]]
-        #print("line 715", cr_status, "->", new_pos_player, point, pos_list)
+        # print("line 650", cr_status, "->", new_pos_player, point, pos_list)
         if point >= 25 and new_pos_player not in BOMB_DANGER_POS:  # not is_danger_bombs(new_pos_player, BOMBS):
             end_status = deepcopy(cr_status)
             end_status[1].append(act)
             end_status[0] = new_pos_player
             pos_list.append(new_pos_player)
-            # print("705", point, pos_list, end_status)
+            # print("line 655", point, pos_list, end_status)
             return point, pos_list, end_status
         # print("710")
         new_status = deepcopy(cr_status)
@@ -728,11 +683,70 @@ def next_pos_bfs(actions, cr_status, pos_list, size_map, hz, e_zone, queue: list
         pos_list.append(new_pos_player)
         queue.append(new_status)
 
-    #print("line 730", queue)
+    # print("line 730", queue)
 
     next_status = queue.pop(0)
 
     point, pos_list, end_status = next_pos_bfs(actions, next_status, pos_list, size_map, hz, e_zone, queue)
+
+    return point, pos_list, end_status
+
+
+LEVEL_F = 3
+
+
+def bfs_f(start: list, size_map: list):
+    pos_list = [start]  # lọc lặp
+    z = is_zone(start, size_map)
+    actions = get_move_in_zone(z)
+    queue = []
+    result = False
+    try:
+        begin_status = [start, 0]  # current pos , action to pos
+
+        point, _, _ = next_pos_bfs_f(actions, begin_status, pos_list, size_map, queue)
+
+        if point != 0:
+            result = True
+    finally:
+        # print(result)
+        return result
+
+
+def next_pos_bfs_f(actions, cr_status, pos_list, size_map, queue: list):
+    for act in actions:
+        new_pos_player = [sum(i) for i in zip(cr_status[0], act)]
+        # print("line 715", cr_status, "->", new_pos_player)
+        if new_pos_player in pos_list:
+            continue
+        if MAP[new_pos_player[0]][new_pos_player[1]] in NO_LIST_BFS:
+            # print("line 720", new_pos_player, MAP[new_pos_player[0]][new_pos_player[1]])
+            continue
+
+        point = EVALUATE_MAP_ROAD[new_pos_player[0]][new_pos_player[1]]
+        if point == 0 and cr_status[1] == LEVEL_F:
+            continue
+        if point != 0:
+            end_status = deepcopy(cr_status)
+            end_status[1] = cr_status[1] + 1
+            end_status[0] = new_pos_player
+            pos_list.append(new_pos_player)
+            # print("line 655", point, pos_list, end_status)
+            return point, pos_list, end_status
+
+        # print("710")
+        new_status = deepcopy(cr_status)
+        new_status[1] = cr_status[1] + 1
+        new_status[0] = new_pos_player
+
+        pos_list.append(new_pos_player)
+        queue.append(new_status)
+
+    # print("line 730", queue)
+
+    next_status = queue.pop(0)
+
+    point, pos_list, end_status = next_pos_bfs_f(actions, next_status, pos_list, size_map, queue)
 
     return point, pos_list, end_status
 
@@ -747,6 +761,8 @@ LOSE = -10000
 WIN = 10000
 TMP_MAX = 1000
 TMP_MIN = -1000
+TELE_POINT = 1000
+DANGER_POINT = 3000
 P1 = 1  # player
 P2 = 2  # enemy
 
@@ -783,8 +799,10 @@ def destroy_point(power, bomb) -> int:
                     point += 100
         case 2:
             point += destroy_point_with_lv(bomb, BombRange.LV2.value)
-        case _:
+        case 3:
             point += destroy_point_with_lv(bomb, BombRange.LV3.value)
+        case _:
+            point += destroy_point_with_lv(bomb, BombRange.LV4.value)
     return point
 
 
@@ -805,7 +823,7 @@ def destroy_point_with_lv(bomb, bomb_range) -> int:
 
 def list_pos_bomb(power, bomb) -> list:
     list_pos = [[bomb["row"], bomb["col"]]]
-    print("835 : add list bomb pos")
+    # print("835 : add list bomb pos")
     match power:
         case 1:
             for i in BombRange.LV1.value:
@@ -813,9 +831,14 @@ def list_pos_bomb(power, bomb) -> list:
                 list_pos.append([bomb["row"] + i[0], bomb["col"] + i[1]])
         case 2:
             list_pos += list_pos_bomb_with_lv(bomb, BombRange.LV2.value)
-        case _:
+        case 3:
             list_pos += list_pos_bomb_with_lv(bomb, BombRange.LV3.value)
+        case _:
+            list_pos += list_pos_bomb_with_lv(bomb, BombRange.LV4.value)
     return list_pos
+
+
+LIST_NO_DES = [1, 5]
 
 
 def list_pos_bomb_with_lv(bomb, bomb_range) -> list:
@@ -826,23 +849,46 @@ def list_pos_bomb_with_lv(bomb, bomb_range) -> list:
                 continue
             if bomb["col"] + j[1] < 0 or bomb["col"] + j[1] >= COLS:
                 continue
-            if MAP[bomb["row"] + j[0]][bomb["col"] + j[1]] == 1:  # todo check lại vụ cản xem đúng chưa
+            if MAP[bomb["row"] + j[0]][bomb["col"] + j[1]] in LIST_NO_DES:  # todo check lại vụ cản xem đúng chưa
                 continue
 
             list_pos.append([bomb["row"] + j[0], bomb["col"] + j[1]])
     return list_pos
 
 
+REMAIN_TIME_LOCK = 600
+TIME_UNLOCK = 1200
+
+
 def get_list_pos_bomb_danger(bombs):
     list_pos = []
     for bomb in bombs:
-        print("870", bomb)
-        if bomb["remainTime"] > 1300:
+        print("line 870", bomb)
+        if bomb["remainTime"] > 900:
             continue
+        if bomb["remainTime"] < REMAIN_TIME_LOCK:
+            if bomb not in BOMBS_:
+                BOMBS_.append(bomb)
+                BOMBS_L2.append(TIME_POINT)
         if bomb["playerId"] == PLAYER_ID:
             list_pos += list_pos_bomb(EF_PLAYER["power"], bomb)
         else:
             list_pos += list_pos_bomb(EF_ENEMY["power"], bomb)
+
+    while BOMBS_L2:
+        if TIME_POINT - BOMBS_L2[0] > TIME_UNLOCK:
+            BOMBS_L2.pop(0)
+            BOMBS_.pop(0)
+        else:
+            break
+    print("list bomb keep", BOMBS_)
+    print("list bomb keep", BOMBS_L2)
+    for bomb in BOMBS_:
+        if bomb["playerId"] == PLAYER_ID:
+            list_pos += list_pos_bomb(EF_PLAYER["power"], bomb)
+        else:
+            list_pos += list_pos_bomb(EF_ENEMY["power"], bomb)
+    print(list_pos)
     return list_pos
 
 
@@ -886,8 +932,10 @@ def is_pos_danger(power, bomb, position):
                     return True
         case 2:
             return is_pos_danger_with_lv(bomb, BombRange.LV2.value, position)
-        case _:
+        case 3:
             return is_pos_danger_with_lv(bomb, BombRange.LV3.value, position)
+        case _:
+            return is_pos_danger_with_lv(bomb, BombRange.LV4.value, position)
     return False
 
 
@@ -925,13 +973,11 @@ def val(position: Position, list_pos=None) -> int:
     if position.bombs:
         for bomb in position.bombs:
             if is_danger_bomb(position.pos_player, bomb):
-                value -= 1000
+                value -= DANGER_POINT
             if is_danger_bomb(position.pos_enemy, bomb):
-                value += 100
+                value += 200
             if bomb["playerId"] == PLAYER_ID:
                 value += bomb_bonus(bomb) * 1.5
-            else:
-                value -= bomb_bonus(bomb)
     else:
         pass
     if list_pos is not None:
@@ -950,250 +996,7 @@ def check_pos_can_go(new_pos, position: Position):
     return True
 
 
-# ab
-
-H_AB = 5  # dộ sâu
-
-ACTIONS_AB = [[1, 1], [0, 0], [0, -1], [1, 0], [0, 1], [-1, 0]]
-"""
-0-1
-2-3
-4-5
-"""
-
-
-def minimax_ab(position: Position) -> list:
-    alpha = MIN
-    beta = MAX
-    action = None
-    try:
-        for act in ACTIONS_AB:
-            match act:
-                case [1, 1]:
-                    # print(f"action:{act} level:0")
-                    if not position.bomb_player:
-                        continue
-                    new_position = deepcopy(position)
-                    new_position.bomb_player = False
-
-                    new_position.bombs = deepcopy(position.bombs)
-                    new_position.bombs.append(
-                        {
-                            "row": new_position.pos_player[0],
-                            "col": new_position.pos_player[1],
-                            "playerId": PLAYER_ID
-                        }
-                    )
-                    point = min_val(new_position, 1, player=P2, alpha=alpha, beta=beta)
-                    if alpha < point:
-                        # print(f"61 action:{act} level: 0 :{alpha} -> {point}yes")
-                        alpha = point
-                        action = act
-                case [0, 0]:
-                    continue
-                case _:
-                    # reposition
-                    new_pos_player = [sum(i) for i in zip(position.pos_player, act)]
-                    # print(f"67 action:{act} level:{0}")
-                    if MAP[new_pos_player[0]][new_pos_player[1]] in NO_LIST:
-                        continue
-                    if not check_pos_can_go(new_pos_player, position):
-                        continue
-                    new_position = deepcopy(position)
-                    new_position.pos_player = new_pos_player
-
-                    point = min_val(new_position, 1, player=P2, alpha=alpha, beta=beta)
-                    if alpha < point:
-                        # print(f"75 action:{act} level:0 -:{alpha} -> {point} yes")
-                        alpha = point
-                        action = act
-    finally:
-        pass
-    # print(action)
-    return [action]
-
-
-def min_val(position: Position, level, player, alpha, beta) -> int:
-    # check_kill()
-    # print(position)
-    # print([level, player], "min")
-    if level == H_AB:
-        # print(f"match [{H}, 2]")
-        try:
-            for act in ACTIONS_AB:
-                match act:
-                    case [1, 1]:
-                        if not position.bomb_enemy:
-                            continue
-                        new_position = deepcopy(position)
-                        new_position.bomb_enemy = False
-                        # print(f"p: {player} action:{act} level:{level}")
-                        new_position.bombs = deepcopy(position.bombs)
-                        new_position.bombs.append(
-                            {
-                                "row": new_position.pos_enemy[0],
-                                "col": new_position.pos_enemy[1],
-                                "playerId": ENEMY_ID
-                            }
-                        )
-
-                        point = val(position=new_position)
-                        if beta > point:
-                            beta = point
-                            # print(new_position, "=>", point)
-                            if alpha > beta:
-                                break
-                    case _:
-                        # reposition
-                        new_pos_enemy = [sum(i) for i in zip(position.pos_enemy, act)]
-                        if not check_pos_can_go(new_pos_enemy, position):
-                            continue
-                        if MAP[new_pos_enemy[0]][new_pos_enemy[1]] in NO_LIST:
-                            continue
-                        # print(f"p: {player} action:{act} level:{level}")
-                        new_position = deepcopy(position)
-                        new_position.pos_enemy = new_pos_enemy
-
-                        point = val(position=new_position)
-                        if beta > point:
-                            beta = point
-                            # print(new_position, "=>", point)
-                        if alpha > beta:
-                            break
-        finally:
-            pass
-    else:
-        try:
-            for act in ACTIONS_AB:
-                match act:
-                    case [1, 1]:
-                        # print(f"p: {player} action:{act} level:{level}")
-                        if not position.bomb_enemy:
-                            continue
-                        new_position = deepcopy(position)
-                        new_position.bomb_enemy = False
-                        # print(f"224 action:{act} level:{level}")
-                        new_position.bombs = deepcopy(position.bombs)
-                        new_position.bombs.append(
-                            {
-                                "row": new_position.pos_enemy[0],
-                                "col": new_position.pos_enemy[1],
-                                "playerId": ENEMY_ID
-                            }
-                        )
-
-                        point = max_val(position=new_position, level=level + 1, player=P1, alpha=alpha, beta=beta)
-                        # print(f"234 action:{act} level:{level} value:{beta} point:{point}")
-                        if beta > point:
-                            beta = point
-                            if alpha > beta:
-                                break
-                    case [0, 0]:
-                        continue
-                    case _:
-                        # reposition
-                        new_pos_enemy = [sum(i) for i in zip(position.pos_enemy, act)]
-                        # print(f"p: {player} action:{act} level:{level}")
-                        if MAP[new_pos_enemy[0]][new_pos_enemy[1]] in NO_LIST:
-                            continue
-                        if not check_pos_can_go(new_pos_enemy, position):
-                            continue
-                        new_position = deepcopy(position)
-                        new_position.pos_enemy = new_pos_enemy
-
-                        point = max_val(position=new_position, level=level + 1, player=P1, alpha=alpha, beta=beta)
-                        # print(f"249 action:{act} level:{level} value:{beta} point:{point}")
-                        if beta > point:
-                            beta = point
-                            if alpha > beta:
-                                break
-        finally:
-            pass
-    # print(beta, level, "end")
-    return beta
-
-
-def max_val(position: Position, level, player, alpha, beta) -> int:
-    # check_kill()
-    # print(position)
-    # print([level, player])
-    if level == H_AB:
-        try:
-            for act in ACTIONS_AB:
-                match act:
-                    case [1, 1]:
-                        pass
-                    case _:
-                        # reposition
-                        new_pos_player = [sum(i) for i in zip(position.pos_player, act)]
-                        if not check_pos_can_go(new_pos_player, position):
-                            continue
-                        if MAP[new_pos_player[0]][new_pos_player[1]] in NO_LIST:
-                            continue
-                        # print(f"p: {player} action:{act} level:{level}")
-                        new_position = deepcopy(position)
-                        new_position.pos_player = new_pos_player
-
-                        point = val(position=new_position)
-                        if alpha < point:
-                            alpha = point
-                            # print(new_position, "=>", point)
-                            if alpha > beta:
-                                break
-        finally:
-            pass
-
-    else:
-        try:
-            for act in ACTIONS_AB:
-                match act:
-                    case [1, 1]:
-                        if not position.bomb_player:
-                            continue
-                        new_position = deepcopy(position)
-                        new_position.bomb_player = False
-                        # print(f"p: {player} action:{act} level:{level}")
-                        new_position.bombs = deepcopy(position.bombs)
-                        new_position.bombs.append(
-                            {
-                                "row": new_position.pos_player[0],
-                                "col": new_position.pos_player[1],
-                                "playerId": PLAYER_ID
-                            }
-                        )
-
-                        point = min_val(position=new_position, level=level + 1, player=P2, alpha=alpha, beta=beta)
-                        if alpha < point:
-                            alpha = point
-                            # print(new_position, "=>", point)
-                    case [0, 0]:
-                        continue
-                    case _:
-                        # reposition
-                        new_pos_player = [sum(i) for i in zip(position.pos_player, act)]
-                        if not check_pos_can_go(new_pos_player, position):
-                            continue
-                        if MAP[new_pos_player[0]][new_pos_player[1]] in NO_LIST:
-                            continue
-                        # print(f"p: {player} action:{act} level:{level}")
-                        new_position = deepcopy(position)
-                        new_position.pos_player = new_pos_player
-
-                        point = min_val(position=new_position, level=level + 1, player=P2, alpha=alpha, beta=beta)
-                        if alpha < point:
-                            alpha = point
-                            # print(alpha)
-                            if alpha > beta:
-                                break
-        finally:
-            pass
-    # print(alpha, level, "end")
-    return alpha
-
-
-# NOE
-
-H_NOE = 3  # dộ sâu
+H_NOE = 4  # dộ sâu
 
 
 def minimax_no_e(position: Position, zone: int) -> list:
@@ -1203,13 +1006,13 @@ def minimax_no_e(position: Position, zone: int) -> list:
     act_list = []
 
     try:
-        actions = get_action_in_zone(zone)
+        actions = get_action_out_zone(zone)
         # print(actions)
 
         for act in actions:
             match act:
                 case [1, 1]:
-                    print(f"{act_list} action:{act} level:0 ")
+                    # print(f"{act_list} action:{act} level:0 ")
                     if not position.bomb_player:
                         continue
                     new_position = deepcopy(position)
@@ -1244,19 +1047,30 @@ def minimax_no_e(position: Position, zone: int) -> list:
                     # reposition
                     new_pos_player = [sum(i) for i in zip(position.pos_player, act)]
                     # print(f"1175 action:{act} level:{0}")
-                    if BOMB_PLAYER_ENABLE and new_pos_player in BOMB_DANGER_POS:
+                    if new_pos_player in BOMB_DANGER_POS:
                         continue
-                    if MAP[new_pos_player[0]][new_pos_player[1]] in NO_LIST:
+                    if MAP[new_pos_player[0]][new_pos_player[1]] in NO_LIST_MAX:
                         continue
                     if not check_pos_can_go(new_pos_player, position):
                         continue
-                    new_position = deepcopy(position)
-                    new_position.pos_player = new_pos_player
-                    # bên trên đã thay đổi nên dưới dugn lại bị sai
-                    new_pos_list = deepcopy([position.pos_player])
-                    new_act_list = deepcopy([])
-                    new_act_list.append(act)
-                    point_no_e, pos, move = max_val_no_e(new_position, actions, 1, new_pos_list, new_act_list)
+                    if new_pos_player == POS_ENEMY:
+                        continue
+                    if MAP[new_pos_player[0]][new_pos_player[1]] == 3:
+                        new_position = deepcopy(position)
+                        new_position.pos_player = new_pos_player
+                        # bên trên đã thay đổi nên dưới dugn lại bị sai
+                        new_pos_list = deepcopy([position.pos_player])
+                        new_act_list = deepcopy([])
+                        new_act_list.append(act)
+                        point_no_e, pos, move = -TELE_POINT, new_pos_list, new_act_list
+                    else:
+                        new_position = deepcopy(position)
+                        new_position.pos_player = new_pos_player
+                        # bên trên đã thay đổi nên dưới dugn lại bị sai
+                        new_pos_list = deepcopy([position.pos_player])
+                        new_act_list = deepcopy([])
+                        new_act_list.append(act)
+                        point_no_e, pos, move = max_val_no_e(new_position, actions, 1, new_pos_list, new_act_list)
                     if value < point_no_e:
                         # print(f"1190 action:{act} level:{0} point: {point_no_e}  {move} yes")
                         value = point_no_e
@@ -1265,11 +1079,11 @@ def minimax_no_e(position: Position, zone: int) -> list:
 
     finally:
         pass
+    print("pos_list", pos_list)
     return act_list
 
 
-def max_val_no_e(position: Position, actions, level, pos_list: list, act_list) -> tuple[
-    Any, list[Any] | Any, list[Any] | Any]:
+def max_val_no_e(position: Position, actions, level, pos_list: list, act_list):
     value = MIN
     move = []
     pos = []
@@ -1358,9 +1172,13 @@ def move_action(position: Position, current_action, actions, level, pos_list, mo
     """
     if not check_pos_can_go(new_pos_player, position):
         return MIN, pos_list, move_list
-    if MAP[new_pos_player[0]][new_pos_player[1]] in NO_LIST:
+    if MAP[new_pos_player[0]][new_pos_player[1]] in NO_LIST_MAX:
         return MIN, pos_list, move_list
+    if MAP[new_pos_player[0]][new_pos_player[1]] == 3:
+        return -TELE_POINT, pos_list, move_list
     if new_pos_player in pos_list:  # list check đã đi qua
+        return MIN, pos_list, move_list
+    if new_pos_player == POS_ENEMY:
         return MIN, pos_list, move_list
     # print("170", move_list, "moving", current_action)
     new_position = deepcopy(position)

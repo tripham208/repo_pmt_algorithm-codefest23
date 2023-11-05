@@ -11,7 +11,7 @@ from gst.model.position import Position
 
 # global var
 URL = 'http://localhost:1543/'
-GAME_ID = "0c8546f6-d767-4632-a4b2-80ff62c553db"
+GAME_ID = "3e1237dc-3b2b-4b3f-8dd1-12035879166f"
 PLAYER_ID = "player1-xxx"
 ENEMY_ID = "player2-xxx"
 
@@ -47,7 +47,7 @@ SPOILS = []
 SPOILS_POS = []
 EF_PLAYER = {
     "power": 1,
-    "lives": 3
+    "lives": 1000
 }
 EF_ENEMY = {
     "power": 1,
@@ -133,6 +133,9 @@ def paste_player_data(players):
         if player["id"] == PLAYER_ID:
             POS_PLAYER = [player["currentPosition"]["row"], player["currentPosition"]["col"]]
             EF_PLAYER["power"] = player["power"]
+            if player["lives"] == EF_PLAYER["lives"] - 1:
+                print(
+                    f"------------------{player['lives']}----------------------{EF_PLAYER['lives'] - 1}---------------")
             EF_PLAYER["lives"] = player["lives"]
         else:
             POS_ENEMY = [player["currentPosition"]["row"], player["currentPosition"]["col"]]
@@ -353,6 +356,7 @@ def emit_direction(direction):
 def ticktack_handler(data):
     global BOMB_DANGER_POS
     print(data["id"], "-", data["tag"])
+
     BOMB_DANGER_POS = get_list_pos_bomb_danger(data["map_info"]["bombs"])  # update liên tục
     """
     #update theo tag
@@ -384,7 +388,7 @@ def ticktack_handler(data):
 
 
 def get_case_action() -> int:
-    if  True: #is_save_zone():
+    if True:  # is_save_zone():
         # show_map(EVALUATE_MAP_ROAD)
         # show_map(EVALUATE_MAP_PLAYER)
         val_pos = EVALUATE_MAP_ROAD[POS_PLAYER[0]][POS_PLAYER[1]]
@@ -678,7 +682,7 @@ def bfs(start: list, size_map: list, p_zone: int, e_zone: int, hz=None):
         begin_status = [start, []]  # current pos , action to pos
 
         point, pos_list, end_status = next_pos_bfs(actions, begin_status, pos_list, size_map, hz, e_zone, queue)
-        # print("675", point, pos_list, end_status)
+        print("685", point, pos_list, end_status)
         if point >= 25:
             # print("return", end_status[1])
             act_list = end_status[1]
@@ -689,7 +693,7 @@ def bfs(start: list, size_map: list, p_zone: int, e_zone: int, hz=None):
 def next_pos_bfs(actions, cr_status, pos_list, size_map, hz, e_zone, queue: list):
     for act in actions:
         new_pos_player = [sum(i) for i in zip(cr_status[0], act)]
-
+        #print("line 700", cr_status, "->", new_pos_player)
         if new_pos_player in pos_list:
             continue
         if MAP[new_pos_player[0]][new_pos_player[1]] in NO_LIST:
@@ -709,8 +713,8 @@ def next_pos_bfs(actions, cr_status, pos_list, size_map, hz, e_zone, queue: list
         # continue
 
         point = EVALUATE_MAP_ROAD[new_pos_player[0]][new_pos_player[1]]
-        # print("700", cr_status, "->", new_pos_player, point, pos_list)
-        if point >= 25 and not is_danger_bombs(new_pos_player, BOMBS):
+        #print("line 715", cr_status, "->", new_pos_player, point, pos_list)
+        if point >= 25 and new_pos_player not in BOMB_DANGER_POS:  # not is_danger_bombs(new_pos_player, BOMBS):
             end_status = deepcopy(cr_status)
             end_status[1].append(act)
             end_status[0] = new_pos_player
@@ -725,7 +729,7 @@ def next_pos_bfs(actions, cr_status, pos_list, size_map, hz, e_zone, queue: list
         pos_list.append(new_pos_player)
         queue.append(new_status)
 
-    # print("715", queue)
+    #print("line 730", queue)
 
     next_status = queue.pop(0)
 

@@ -29,11 +29,25 @@ class NextActionInZone(Enum):
     Z4 = [[0, 0], [1, 1], [1, 0], [0, 1], [0, -1], [-1, 0]]
 
 
+class NextActionOutZone(Enum):
+    Z1 = [[0, 0], [1, 1], [1, 0], [0, 1], [0, -1], [-1, 0]]
+    Z2 = [[0, 0], [1, 1], [1, 0], [0, -1], [-1, 0], [0, 1]]
+    Z3 = [[0, 0], [1, 1], [0, 1], [-1, 0], [0, -1], [1, 0]]
+    Z4 = [[0, 0], [1, 1], [0, -1], [-1, 0], [1, 0], [0, 1]]
+
+
 class NextMoveInZone(Enum):
     Z1 = [[0, -1], [-1, 0], [1, 0], [0, 1]]
     Z2 = [[-1, 0], [0, 1], [1, 0], [0, -1]]
     Z3 = [[0, -1], [1, 0], [0, 1], [-1, 0]]
     Z4 = [[1, 0], [0, 1], [0, -1], [-1, 0]]
+
+
+class NextMoveOutZone(Enum):
+    Z1 = [[1, 0], [0, 1], [0, -1], [-1, 0]]
+    Z2 = [[1, 0], [0, -1], [-1, 0], [0, 1]]
+    Z3 = [[0, 1], [-1, 0], [0, -1], [1, 0]]
+    Z4 = [[0, -1], [-1, 0], [1, 0], [0, 1]]
 
 
 class NextMoveInHaftZone(Enum):
@@ -57,6 +71,12 @@ class BombRange(Enum):
         [[0, 1], [0, 2], [0, 3]],
         [[-1, 0], [-2, 0], [-3, 0]]
     ]
+    LV4 = [
+        [[0, -1], [0, -2], [0, -3], [0, -4]],
+        [[1, 0], [2, 0], [3, 0], [4, 0]],
+        [[0, 1], [0, 2], [0, 3], [0, 4]],
+        [[-1, 0], [-2, 0], [-3, 0], [-4, 0]]
+    ]
 
 
 def get_action_in_zone(region):
@@ -71,6 +91,18 @@ def get_action_in_zone(region):
             return NextActionInZone.Z4.value
 
 
+def get_action_out_zone(region):
+    match region:
+        case 1:
+            return NextActionOutZone.Z1.value
+        case 2:
+            return NextActionOutZone.Z2.value
+        case 3:
+            return NextActionOutZone.Z3.value
+        case _:
+            return NextActionOutZone.Z4.value
+
+
 def get_move_in_zone(region):
     match region:
         case 1:
@@ -81,6 +113,18 @@ def get_move_in_zone(region):
             return NextMoveInZone.Z3.value
         case _:
             return NextMoveInZone.Z4.value
+
+
+def get_move_out_zone(region):
+    match region:
+        case 1:
+            return NextMoveOutZone.Z1.value
+        case 2:
+            return NextMoveOutZone.Z2.value
+        case 3:
+            return NextMoveOutZone.Z3.value
+        case _:
+            return NextMoveOutZone.Z4.value
 
 
 def get_action_zone(region):
