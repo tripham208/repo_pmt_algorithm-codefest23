@@ -9,10 +9,10 @@ import math as m
 from gst.model.position import Position
 
 # global var
-URL = 'http://localhost:1543/'
-GAME_ID = "6de156af-2c67-4548-9b15-0140d696e93f"
-PLAYER_ID = "player1-xxxxxxxxxxxxxxxxxxxxxx"
-# ENEMY_ID = "player2-xxx"
+URL = 'http://3.0.205.70/'
+GAME_ID = "c173a70d-341c-4bf0-a175-f27d582b57b2"
+PLAYER_ID = "e62ce467-79a6-4459-9ed2-68d97ddbc14f"
+# ENEMY_ID = "player=2-xxx"
 
 JOIN_GAME_EVENT = 'join game'
 TICKTACK_EVENT = "ticktack player"
@@ -187,7 +187,7 @@ def set_spoil():
             # a.append([EVALUATE_MAP_ROAD[row + i[0]][col + i[1]], i])
             # EVALUATE_MAP_ROAD[spoil["row"] + i[0]][spoil["col"] + i[1]] += 50
         else:
-            EVALUATE_MAP_PLAYER[spoil["row"]][spoil["col"]] = 0
+            EVALUATE_MAP_PLAYER[spoil["row"]][spoil["col"]] = 50
             # MAP[spoil["row"]][spoil["col"]] = 16  # lock map
 
 
@@ -372,7 +372,7 @@ def ticktack_handler(data):
 
     # todo
     # ring 1 vs 2 => lệch count diretion
-    # shit rơi => dùng  (<=) => ring 1 vs 1
+    # shit rơi => dùng  (<=) => ring 1 vs 1 / maybe ở mé nên action ngược nhau
     if COUNT == ACTION_PER_POINT or data["timestamp"] - TIME_POINT > RANGE_TIME:
         ACTION_PER_POINT = 2
         TIME_POINT = data["timestamp"]
@@ -820,7 +820,7 @@ def list_pos_bomb_with_lv(bomb, bomb_range) -> list:
 
 
 REMAIN_TIME_LOCK = 600
-TIME_UNLOCK = 1200
+TIME_UNLOCK = 900
 
 
 def get_list_pos_bomb_danger(bombs):
@@ -837,7 +837,7 @@ def get_list_pos_bomb_danger(bombs):
             list_pos += list_pos_bomb(EF_PLAYER["power"], bomb)
         else:
             list_pos += list_pos_bomb(EF_ENEMY["power"], bomb)
-
+    """"""
     while BOMBS_L2:
         if TIME_POINT - BOMBS_L2[0] > TIME_UNLOCK:
             BOMBS_L2.pop(0)
@@ -970,7 +970,7 @@ def minimax_no_e(position: Position, zone: int) -> list:
 
     try:
         actions = get_action_out_zone(zone)
-        # print(actions)
+        print("list action: ", actions)
 
         for act in actions:
             match act:
@@ -1083,7 +1083,7 @@ def max_val_no_e(position: Position, actions, level, pos_list: list, act_list):
                                                                 level=level,
                                                                 pos_list=pos_list, move_list=act_list)
 
-                    if value < point_max_no_e:
+                    if value <= point_max_no_e:
                         # print(f"1235 action:{act} level:{level} point: {point_max_no_e} {pos_l} {move_l}")
                         value = point_max_no_e
                         move = move_l
