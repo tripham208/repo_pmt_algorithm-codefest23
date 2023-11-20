@@ -30,10 +30,24 @@ class NextActionInZone(Enum):
 
 
 class NextActionOutZone(Enum):
+
+    Z1 = [[0, 0], [1, 1], [1, 0], [0, -1], [0, 1], [-1, 0]]
+    Z2 = [[0, 0], [1, 1], [1, 0], [-1, 0], [0, -1], [0, 1]]
+    Z3 = [[0, 0], [1, 1], [0, 1], [0, -1], [-1, 0], [1, 0]]
+    Z4 = [[0, 0], [1, 1], [0, -1], [1, 0], [-1, 0], [0, 1]]
+    """
     Z1 = [[0, 0], [1, 1], [1, 0], [0, 1], [0, -1], [-1, 0]]
     Z2 = [[0, 0], [1, 1], [1, 0], [0, -1], [-1, 0], [0, 1]]
     Z3 = [[0, 0], [1, 1], [0, 1], [-1, 0], [0, -1], [1, 0]]
     Z4 = [[0, 0], [1, 1], [0, -1], [-1, 0], [1, 0], [0, 1]]
+    """
+
+
+class NextActionOutZoneChange(Enum):
+    Z1 = [[0, 0], [1, 1], [0, 1], [1, 0], [-1, 0], [0, -1]]
+    Z2 = [[0, 0], [1, 1], [0, -1], [1, 0], [0, 1], [-1, 0]]
+    Z3 = [[0, 0], [1, 1], [-1, 0], [0, 1], [1, 0], [0, -1]]
+    Z4 = [[0, 0], [1, 1], [-1, 0], [0, -1], [0, 1], [1, 0]]
 
 
 class NextMoveInZone(Enum):
@@ -44,10 +58,10 @@ class NextMoveInZone(Enum):
 
 
 class NextMoveOutZone(Enum):
-    Z1 = [[1, 0], [0, 1], [0, -1], [-1, 0]]
-    Z2 = [[1, 0], [0, -1], [-1, 0], [0, 1]]
-    Z3 = [[0, 1], [-1, 0], [0, -1], [1, 0]]
-    Z4 = [[0, -1], [-1, 0], [1, 0], [0, 1]]
+    Z1 = [[0, 1], [1, 0], [-1, 0], [0, -1]]
+    Z2 = [[0, -1], [1, 0], [0, 1], [-1, 0]]
+    Z3 = [[-1, 0], [0, 1], [1, 0], [0, -1]]
+    Z4 = [[-1, 0], [0, -1], [0, 1], [1, 0]]
 
 
 class NextMoveInHaftZone(Enum):
@@ -100,6 +114,26 @@ def get_action_out_zone(region):
         case 3:
             return NextActionOutZone.Z3.value
         case _:
+            return NextActionOutZone.Z4.value
+
+
+def change_action_out_zone(actions):
+    match actions:
+        case NextActionOutZone.Z1.value:
+            return NextActionOutZoneChange.Z1.value
+        case NextActionOutZone.Z2.value:
+            return NextActionOutZoneChange.Z2.value
+        case NextActionOutZone.Z3.value:
+            return NextActionOutZoneChange.Z3.value
+        case NextActionOutZone.Z4.value:
+            return NextActionOutZoneChange.Z4.value
+        case NextActionOutZoneChange.Z1.value:
+            return NextActionOutZone.Z1.value
+        case NextActionOutZoneChange.Z2.value:
+            return NextActionOutZone.Z2.value
+        case NextActionOutZoneChange.Z3.value:
+            return NextActionOutZone.Z4.value
+        case NextActionOutZoneChange.Z4.value:
             return NextActionOutZone.Z4.value
 
 
