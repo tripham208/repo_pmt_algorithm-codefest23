@@ -1,5 +1,6 @@
 from gst.handler import show_map
 from gst.model.const import BombRange
+from gst.model.position import Position
 
 LIST_NO_DES = [1, 5]
 ROWS = 13
@@ -32,9 +33,25 @@ def list_pos_bomb_with_lv(bomb, bomb_range):
             MAP[bomb["row"] + j[0]][bomb["col"] + j[1]] = 9
 
 
+A = None
+
+def a():
+    global A
+    A = Position(
+        pos_player=[1, 2],
+        pos_enemy=[2, 3],
+        bomb_player=True,
+        bomb_enemy=True
+    )
+
+    print(A)
+
+    A = Position(
+        pos_player=[1, 2],
+        pos_enemy=[2, 6],
+        bomb_player=False,
+        bomb_enemy=True
+    )
+    print(A)
 if __name__ == '__main__':
-    list_pos_bomb_with_lv({
-        "row": 6,
-        "col": 6,
-    },BombRange.LV4.value)
-    show_map(MAP)
+    a()

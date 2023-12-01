@@ -8,7 +8,7 @@ class Position:
                  ):
         if bombs is None:
             bombs = []
-        self.bombs = bombs  # list bom mới
+        self.bombs: list[dict] = bombs  # list bom mới
         self.bomb_enemy = bomb_enemy
         self.bomb_player = bomb_player
         self.pos_player = pos_player
