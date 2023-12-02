@@ -11,9 +11,9 @@ from pmt.util import pr_yellow, pr_green, pr_red
 
 # global var
 URL = "http://localhost:1543/"  # 'http://192.168.0.101/'
-GAME_ID = "8314308c-d3aa-49ed-b3db-4dc10aa190eb"
+GAME_ID = "81e28101-1462-4733-a715-8fa00764a959"
 
-PLAYER_ID = "player2-xxx"
+PLAYER_ID = "player1-xxx"
 # PLAYER_ID = "player1-xxx"
 
 # ENEMY_ID = "player=2-xxx"
@@ -325,8 +325,10 @@ def emit_direction(direction):
 
 
 TIME_POINT = 0
+TIME_POINT_OWN = 0
 ACTION_PER_POINT = 2
 RANGE_TIME = 500
+RANGE_TIME_OWN = 400
 COUNT = 0
 COUNT_UPDATE = 0
 COUNT_ST = 0
@@ -337,13 +339,15 @@ DIRECTION_HIST = []
 
 
 def ticktack_handler(data):
-    global BOMB_POS_LOCK_MINMAX, COUNT, COUNT_UPDATE, COUNT_ST, ACTION_PER_POINT
-    global TIME_POINT
+    global BOMB_POS_LOCK_MINMAX, COUNT, COUNT_ST, ACTION_PER_POINT, BOMB_POS_LOCK_BFS
+    global TIME_POINT, TIME_POINT_OWN
     print(data["id"], "-", data.get("player_id", "no id"), "-", data["tag"], "-", data["timestamp"], "-", TIME_POINT)
 
     print("pos now", data["map_info"]["players"][0]["id"], data["map_info"]["players"][0]["currentPosition"],
           data["map_info"]["players"][1]["currentPosition"])
     paste_player_data(data["map_info"]["players"])
+    if data.get("player_id", "no id") in PLAYER_ID:
+        TIME_POINT_OWN = data["timestamp"]
 
     if data["tag"] in TAG_PLAYER and data["player_id"] in PLAYER_ID:
         TIME_POINT = data["timestamp"]
@@ -352,13 +356,17 @@ def ticktack_handler(data):
 
     if COUNT == ACTION_PER_POINT:
         pr_yellow("trigger case 1")
-    elif data["timestamp"] - TIME_POINT > RANGE_TIME:
+    elif data.get("player_id", "no id") in PLAYER_ID and data["timestamp"] - TIME_POINT_OWN > RANGE_TIME_OWN:
         pr_yellow("trigger case 2")
+    elif data["timestamp"] - TIME_POINT > RANGE_TIME:
+        pr_yellow("trigger case 3")
 
-    if COUNT == ACTION_PER_POINT or data["timestamp"] - TIME_POINT > RANGE_TIME:
+    if (COUNT == ACTION_PER_POINT
+            or data.get("player_id", "no id") in PLAYER_ID and data["timestamp"] - TIME_POINT_OWN > RANGE_TIME_OWN
+            or data["timestamp"] - TIME_POINT > RANGE_TIME):
         ACTION_PER_POINT = 2
         TIME_POINT = data["timestamp"]
-        BOMB_POS_LOCK_MINMAX = get_list_pos_bomb_danger(data["map_info"]["bombs"])  # update liên tục
+        BOMB_POS_LOCK_MINMAX, BOMB_POS_LOCK_BFS = get_list_pos_bomb_danger(data["map_info"]["bombs"])  # update liên tục
         paste_update_map(data)
 
         action_case = get_case_action()
@@ -389,9 +397,6 @@ def ticktack_handler(data):
         COUNT = 0
         # COUNT_UPDATE = 0
 
-
-# todo: có vẻ action bị dính nên emit vào bị lêch
-
 def dedup_action(action, action_v2):
     global ACTION_PER_POINT
     direction = gen_direction(action)
@@ -410,7 +415,7 @@ def dedup_action(action, action_v2):
     return direction
 
 
-def get_case_action() -> int:
+def get_case_action() -> int:  # todo case điểm về 0
     val_pos = EVALUATE_MAP_ROAD[POS_PLAYER[0]][POS_PLAYER[1]]
     print("pos", POS_PLAYER, "point :", val_pos)
     if bfs_f(POS_PLAYER, [ROWS, COLS]):
@@ -567,7 +572,7 @@ def a_star(start, target):
             return cr_status[3]
         for act in NextMoveZone.Z4.value:
             new_pos_player = [sum(i) for i in zip(cr_status[0], act)]
-            if new_pos_player in BOMB_POS_LOCK_MINMAX:
+            if new_pos_player in BOMB_POS_LOCK_BFS:
                 continue
 
             if MAP[new_pos_player[0]][new_pos_player[1]] in NO_DESTROY_LIST:
@@ -621,13 +626,13 @@ def next_pos_bfs(actions, cr_status, pos_list, size_map, queue: list):
         if MAP[new_pos_player[0]][new_pos_player[1]] in NO_LIST_BFS:
             # print("line 645", new_pos_player, MAP[new_pos_player[0]][new_pos_player[1]])
             continue
-        if new_pos_player in BOMB_POS_LOCK_MINMAX:
+        if new_pos_player in BOMB_POS_LOCK_BFS:
             continue
         if new_pos_player == POS_ENEMY:
             continue
         point = EVALUATE_MAP_ROAD[new_pos_player[0]][new_pos_player[1]]
         # print("line 650", cr_status, "->", new_pos_player, point, pos_list)
-        if point >= 25 and new_pos_player not in BOMB_POS_LOCK_MINMAX:  # not is_danger_bombs(new_pos_player, BOMBS):
+        if point >= 25 and new_pos_player not in BOMB_POS_LOCK_BFS:  # not is_danger_bombs(new_pos_player, BOMBS):
             end_status = deepcopy(cr_status)
             end_status[1].append(act)
             end_status[0] = new_pos_player
@@ -769,7 +774,7 @@ def destroy_point_with_lv(bomb, bomb_range) -> int:
 
 def check_bulk_around_egg(pos):
     if euclid_distance(pos, POS_ENEMY_EGG) <= 2:
-        return 700
+        return 1100
     elif euclid_distance(pos, POS_PLAYER_EGG) <= 2:
         return 0
     else:
@@ -813,14 +818,19 @@ def list_pos_bomb_with_lv(bomb, bomb_range) -> list:
 
 
 REMAIN_TIME_LOCK = 600
-TIME_UNLOCK = 700
+TIME_UNLOCK = 300
 
 
 def get_list_pos_bomb_danger(bombs):
     list_pos = []
+    list_pos_bfs = []
     print("line 805:", bombs)
     for bomb in bombs:
         if bomb["remainTime"] > 900:
+            if bomb["playerId"] in PLAYER_ID:
+                list_pos_bfs += list_pos_bomb(EF_PLAYER["power"], bomb)
+            else:
+                list_pos_bfs += list_pos_bomb(EF_ENEMY["power"], bomb)
             continue
         if bomb["remainTime"] < REMAIN_TIME_LOCK:
             if bomb not in BOMBS_:
@@ -845,8 +855,10 @@ def get_list_pos_bomb_danger(bombs):
             list_pos += list_pos_bomb(EF_PLAYER["power"], bomb)
         else:
             list_pos += list_pos_bomb(EF_ENEMY["power"], bomb)
+    list_pos_bfs += list_pos
     print(list_pos)
-    return list_pos
+    print(list_pos_bfs)
+    return list_pos, list_pos_bfs
 
 
 def is_danger_bombs(position, bombs) -> bool:
@@ -910,7 +922,7 @@ def is_pos_danger_with_lv(bomb, bomb_range, position) -> int:
     return False
 
 
-def val(position: Position, list_pos=None, list_act=None) -> int:
+def val(position: Position, list_pos=None) -> int:
     """
     val  =  val map(+road) + bonus point (bomb nổ trúng thùng / địch)
     :return:
@@ -935,7 +947,8 @@ def val(position: Position, list_pos=None, list_act=None) -> int:
             if bomb["playerId"] in PLAYER_ID:
                 value += bomb_bonus(bomb) * 1.5
 
-            if list_pos is not None and bomb.get("old", False):
+            if list_pos is not None and bomb.get("old", True):
+                # print("check pos bomb")
                 # if list_pos == [[3, 4], [2, 4], [2, 4], [1, 4], [1, 5]]:
                 #    print(value)
                 for idx, x in enumerate(list_pos, start=1):
@@ -1041,13 +1054,15 @@ def action_simulator(position: Position, act_list):
                     new_acts_v2.append(act)
                     break
                 else:
-                    new_pos_player = [sum(i) for i in zip(position.pos_player, act)]
+                    new_pos_player = [sum(i) for i in zip(position_clone.pos_player, act)]
+                    # print(position.pos_player, "->", new_pos_player)
                     position_clone.pos_player = new_pos_player
                     new_acts.append(act)
+                    # pr_green(f"idx:{idx} {position_clone} point: {val(position=position_clone)}")
                     if val(position=position_clone) >= -TELE_POINT and idx >= ACTION_PER_POINT + 1:
                         new_acts_v2 = deepcopy(new_acts)
                         check_point_v2 = True
-                        pr_yellow(f"{position_clone} point: {val(position=position_clone)}")
+                        # pr_yellow(f"{position_clone} point: {val(position=position_clone)}")
     print("line 1030", new_acts, new_acts_v2)
     return new_acts, new_acts_v2
 
@@ -1084,7 +1099,7 @@ def minimax_no_e(position: Position, zone: int) -> list:
                             "row": new_position.pos_player[0],
                             "col": new_position.pos_player[1],
                             "playerId": PLAYER_ID,
-                            "old": True
+                            "old": False
                         }
                     )
 
@@ -1205,7 +1220,7 @@ def bomb_action(position: Position, actions, level, list_pos, list_move):
             "row": new_position.pos_player[0],
             "col": new_position.pos_player[1],
             "playerId": PLAYER_ID,
-            "old": True
+            "old": False
         }
     )
 
