@@ -11,9 +11,9 @@ from pmt.util import pr_yellow, pr_green, pr_red
 
 # global var
 URL = "http://localhost:1543/"  # 'http://192.168.0.101/'
-GAME_ID = "77a0fc53-33c0-4d92-8491-65e3ee3c69e2"
+GAME_ID = "ccf50600-fd3c-41ed-98a1-4c2a255334ac"
 
-PLAYER_ID = "player2-xxx"
+PLAYER_ID = "player1-xxx"
 # PLAYER_ID = "player1-xxx"
 
 # ENEMY_ID = "player=2-xxx"
