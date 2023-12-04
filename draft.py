@@ -11,9 +11,9 @@ from pmt.util import pr_yellow, pr_green, pr_red
 
 # global var
 URL = "http://localhost:1543/"  # 'http://192.168.0.101/'
-GAME_ID = "81e28101-1462-4733-a715-8fa00764a959"
+GAME_ID = "77a0fc53-33c0-4d92-8491-65e3ee3c69e2"
 
-PLAYER_ID = "player1-xxx"
+PLAYER_ID = "player2-xxx"
 # PLAYER_ID = "player1-xxx"
 
 # ENEMY_ID = "player=2-xxx"
@@ -53,10 +53,12 @@ EF_PLAYER = {
     "power": 1,
     "lives": 1000,
     "dragonEggDelay": 0,
+    "score": 0
 }
 EF_ENEMY = {
     "power": 1,
-    "lives": 3
+    "lives": 3,
+    "score": 0
 }
 
 NO_LIST_MAX = [1, 2, 5, 11]
@@ -103,6 +105,7 @@ def paste_player_data(players):
             POS_PLAYER = [player["currentPosition"]["row"], player["currentPosition"]["col"]]
             EF_PLAYER["power"] = player["power"]
             EF_PLAYER["dragonEggDelay"] = player["dragonEggDelay"]
+            EF_PLAYER["score"] = player["score"]
             if player["lives"] == EF_PLAYER["lives"] - 1:
                 print(
                     f"------------------{player['lives']}----------------------{EF_PLAYER['lives'] - 1}---------------")
@@ -110,6 +113,7 @@ def paste_player_data(players):
         else:
             POS_ENEMY = [player["currentPosition"]["row"], player["currentPosition"]["col"]]
             EF_ENEMY["power"] = player["power"]
+            EF_ENEMY["score"] = player["score"]
             # EF_ENEMY["lives"] = player["lives"]
     BOMB_PLAYER_DELAY = min(EF_PLAYER["dragonEggDelay"], 3)
 
@@ -327,7 +331,7 @@ def emit_direction(direction):
 TIME_POINT = 0
 TIME_POINT_OWN = 0
 ACTION_PER_POINT = 2
-RANGE_TIME = 500
+RANGE_TIME = 550
 RANGE_TIME_OWN = 400
 COUNT = 0
 COUNT_UPDATE = 0
@@ -353,7 +357,7 @@ def ticktack_handler(data):
         TIME_POINT = data["timestamp"]
         COUNT += 1
         print("line 350: ", COUNT, " in ", ACTION_PER_POINT)
-
+    """"""
     if COUNT == ACTION_PER_POINT:
         pr_yellow("trigger case 1")
     elif data.get("player_id", "no id") in PLAYER_ID and data["timestamp"] - TIME_POINT_OWN > RANGE_TIME_OWN:
@@ -372,8 +376,8 @@ def ticktack_handler(data):
         action_case = get_case_action()
 
         action = get_action(case=action_case)
-        print("line 360 case", action_case, action)
-        if action_case == 2 and action == []:
+        pr_red(f"line 360 case  {action_case} {action}")
+        if action_case == 2 and action == [] and EF_ENEMY["score"] != 0:
             print("find egg")
             action = get_action(case=5)
         print("action:", action)
@@ -389,13 +393,14 @@ def ticktack_handler(data):
             direction = gen_direction(action)
         else:
             action = action[0:ACTION_PER_POINT + 1]
-            ACTION_PER_POINT = ACTION_PER_POINT + 1
+            ACTION_PER_POINT = len(action)
             direction = gen_direction(action)
         pr_green("line 390 direction:" + direction)
         emit_direction(direction)
         ACTION_PER_POINT = max(ACTION_PER_POINT, 2)
         COUNT = 0
         # COUNT_UPDATE = 0
+
 
 def dedup_action(action, action_v2):
     global ACTION_PER_POINT
@@ -417,13 +422,18 @@ def dedup_action(action, action_v2):
 
 def get_case_action() -> int:  # todo case điểm về 0
     val_pos = EVALUATE_MAP_ROAD[POS_PLAYER[0]][POS_PLAYER[1]]
-    print("pos", POS_PLAYER, "point :", val_pos)
-    if bfs_f(POS_PLAYER, [ROWS, COLS]):
+    print("pos", POS_PLAYER, "point pos:", val_pos)
+    if bfs_f(POS_PLAYER, [ROWS, COLS]) and EF_ENEMY["score"] > 0:
         # print("case 1")
         return 1
     if euclid_distance(POS_ENEMY, POS_PLAYER) <= 4:
         # print("case 2")
         return 1
+    if (EF_ENEMY["score"] <= 0 and EF_PLAYER["power"] > 1) or EF_ENEMY["score"] - EF_PLAYER["score"] >= 50:
+        for i in AroundRange.LV1.value:
+            if MAP[POS_PLAYER[0] + i[0]][POS_PLAYER[1] + i[1]] == 2:
+                return 1
+        return 7
     if val_pos != 0:
         # print("case 3")
         return 1
@@ -767,7 +777,7 @@ def destroy_point_with_lv(bomb, bomb_range) -> int:
                 value += 1000
                 break
             if [bomb["row"] + j[0], bomb["col"] + j[1]] == POS_PLAYER_EGG:
-                value -= 500
+                value -= 1000
                 break
     return value
 
@@ -809,7 +819,7 @@ def list_pos_bomb_with_lv(bomb, bomb_range) -> list:
                 continue
             if bomb["col"] + j[1] < 0 or bomb["col"] + j[1] >= COLS:
                 continue
-            if MAP[bomb["row"] + j[0]][bomb["col"] + j[1]] == 3:
+            if MAP[bomb["row"] + j[0]][bomb["col"] + j[1]] == 10:
                 continue
             if MAP[bomb["row"] + j[0]][bomb["col"] + j[1]] in LIST_NO_DES:
                 break
@@ -884,6 +894,11 @@ def is_danger_bomb(position, bomb) -> bool:
     :return:
     """
     # print("check danger", position, bombs)
+    """
+    if bomb.get("remainTime", 0) > 1200:
+        print(bomb)
+        return False
+    """
     if bomb["playerId"] in PLAYER_ID:
         return is_pos_danger(EF_PLAYER["power"], bomb, position)
     else:
@@ -938,6 +953,8 @@ def val(position: Position, list_pos=None) -> int:
     global COUNT
     COUNT = COUNT + 1
     # print("count", COUNT, position)
+    if check_lock_enemy(position):
+        value += 400
     if position.bombs:
         for bomb in position.bombs:
             if is_danger_bomb(position.pos_player, bomb):
@@ -1021,6 +1038,21 @@ def check_pos_can_go(new_pos, position: Position):
     if new_pos in list_pos:
         return False
     return True
+
+
+def check_lock_enemy(position: Position):
+    list_pos = [position.pos_player]
+    for bomb in position.bombs:
+        list_pos.append([bomb["row"], bomb["col"]])
+    idx = 0
+    for i in BombRange.LV1.value:
+        if [position.pos_enemy[0] + i[0], position.pos_enemy[1] + i[1]] in list_pos:
+            idx += 1
+        if MAP[position.pos_enemy[0] + i[0]][position.pos_enemy[0] + i[1]] in NO_LIST_BFS:
+            idx += 1
+    if idx >= 4:
+        return True
+    return False
 
 
 TMP_POSITION_OBJ: Position
