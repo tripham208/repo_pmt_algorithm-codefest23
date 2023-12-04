@@ -18,6 +18,16 @@ PLAYER_ID = "player1-xxx"
 
 # ENEMY_ID = "player=2-xxx"
 
+"""
+Team Key: 373895f5-dd72-4795-a393-935298f56c2c
+Bảng D - Round 2:
+         Match Key: e2a07f7d-47a0-44cb-827b-fd2e6d60686d
+Bảng D - Round 3:
+         Match Key: cd8f9ed2-6a61-4482-b41f-0236d2520106
+Bảng D - Round 8:
+         Match Key: 325bbfa3-9a7b-4373-8429-f7a2addf6bd6
+
+"""
 JOIN_GAME_EVENT = 'join game'
 TICKTACK_EVENT = "ticktack player"
 DRIVE_EVENT = "drive player"
@@ -783,7 +793,7 @@ def destroy_point_with_lv(bomb, bomb_range) -> int:
 
 
 def check_bulk_around_egg(pos):
-    if euclid_distance(pos, POS_ENEMY_EGG) <= 2:
+    if euclid_distance(pos, POS_ENEMY_EGG) <= 3:
         return 1100
     elif euclid_distance(pos, POS_PLAYER_EGG) <= 2:
         return 0
