@@ -11,7 +11,7 @@ from pmt.util import pr_yellow, pr_green, pr_red
 
 # global var
 URL = "http://localhost:1543/"  # 'http://192.168.0.101/'
-GAME_ID = "8479b8ff-4e0e-44eb-bffc-3d5f26f39654"
+GAME_ID = "77a0fc53-33c0-4d92-8491-65e3ee3c69e2"
 
 PLAYER_ID = "player2-xxx"
 # PLAYER_ID = "player1-xxx"
@@ -53,10 +53,12 @@ EF_PLAYER = {
     "power": 1,
     "lives": 1000,
     "dragonEggDelay": 0,
+    "score": 0
 }
 EF_ENEMY = {
     "power": 1,
-    "lives": 3
+    "lives": 3,
+    "score": 0
 }
 
 NO_LIST_MAX = [1, 2, 5, 11]
@@ -103,6 +105,7 @@ def paste_player_data(players):
             POS_PLAYER = [player["currentPosition"]["row"], player["currentPosition"]["col"]]
             EF_PLAYER["power"] = player["power"]
             EF_PLAYER["dragonEggDelay"] = player["dragonEggDelay"]
+            EF_PLAYER["score"] = player["score"]
             if player["lives"] == EF_PLAYER["lives"] - 1:
                 print(
                     f"------------------{player['lives']}----------------------{EF_PLAYER['lives'] - 1}---------------")
@@ -110,6 +113,7 @@ def paste_player_data(players):
         else:
             POS_ENEMY = [player["currentPosition"]["row"], player["currentPosition"]["col"]]
             EF_ENEMY["power"] = player["power"]
+            EF_ENEMY["score"] = player["score"]
             # EF_ENEMY["lives"] = player["lives"]
     BOMB_PLAYER_DELAY = min(EF_PLAYER["dragonEggDelay"], 3)
 
@@ -325,8 +329,10 @@ def emit_direction(direction):
 
 
 TIME_POINT = 0
+TIME_POINT_OWN = 0
 ACTION_PER_POINT = 2
-RANGE_TIME = 400
+RANGE_TIME = 550
+RANGE_TIME_OWN = 400
 COUNT = 0
 COUNT_UPDATE = 0
 COUNT_ST = 0
@@ -337,35 +343,41 @@ DIRECTION_HIST = []
 
 
 def ticktack_handler(data):
-    global BOMB_POS_LOCK_MINMAX, COUNT, COUNT_UPDATE, COUNT_ST, ACTION_PER_POINT
-    global TIME_POINT
+    global BOMB_POS_LOCK_MINMAX, COUNT, COUNT_ST, ACTION_PER_POINT, BOMB_POS_LOCK_BFS
+    global TIME_POINT, TIME_POINT_OWN
     print(data["id"], "-", data.get("player_id", "no id"), "-", data["tag"], "-", data["timestamp"], "-", TIME_POINT)
 
     print("pos now", data["map_info"]["players"][0]["id"], data["map_info"]["players"][0]["currentPosition"],
           data["map_info"]["players"][1]["currentPosition"])
     paste_player_data(data["map_info"]["players"])
+    if data.get("player_id", "no id") in PLAYER_ID:
+        TIME_POINT_OWN = data["timestamp"]
 
     if data["tag"] in TAG_PLAYER and data["player_id"] in PLAYER_ID:
         TIME_POINT = data["timestamp"]
         COUNT += 1
         print("line 350: ", COUNT, " in ", ACTION_PER_POINT)
-
+    """"""
     if COUNT == ACTION_PER_POINT:
         pr_yellow("trigger case 1")
-    elif data["timestamp"] - TIME_POINT > RANGE_TIME:
+    elif data.get("player_id", "no id") in PLAYER_ID and data["timestamp"] - TIME_POINT_OWN > RANGE_TIME_OWN:
         pr_yellow("trigger case 2")
+    elif data["timestamp"] - TIME_POINT > RANGE_TIME:
+        pr_yellow("trigger case 3")
 
-    if COUNT == ACTION_PER_POINT or data["timestamp"] - TIME_POINT > RANGE_TIME:
+    if (COUNT == ACTION_PER_POINT
+            or data.get("player_id", "no id") in PLAYER_ID and data["timestamp"] - TIME_POINT_OWN > RANGE_TIME_OWN
+            or data["timestamp"] - TIME_POINT > RANGE_TIME):
         ACTION_PER_POINT = 2
         TIME_POINT = data["timestamp"]
-        BOMB_POS_LOCK_MINMAX = get_list_pos_bomb_danger(data["map_info"]["bombs"])  # update liên tục
+        BOMB_POS_LOCK_MINMAX, BOMB_POS_LOCK_BFS = get_list_pos_bomb_danger(data["map_info"]["bombs"])  # update liên tục
         paste_update_map(data)
 
         action_case = get_case_action()
 
         action = get_action(case=action_case)
-        print("line 360 case", action_case, action)
-        if action_case == 2 and action == []:
+        pr_red(f"line 360 case  {action_case} {action}")
+        if action_case == 2 and action == [] and EF_ENEMY["score"] != 0:
             print("find egg")
             action = get_action(case=5)
         print("action:", action)
@@ -381,13 +393,14 @@ def ticktack_handler(data):
             direction = gen_direction(action)
         else:
             action = action[0:ACTION_PER_POINT + 1]
-            ACTION_PER_POINT = ACTION_PER_POINT + 1
+            ACTION_PER_POINT = len(action)
             direction = gen_direction(action)
         pr_green("line 390 direction:" + direction)
         emit_direction(direction)
         ACTION_PER_POINT = max(ACTION_PER_POINT, 2)
         COUNT = 0
         # COUNT_UPDATE = 0
+
 
 def dedup_action(action, action_v2):
     global ACTION_PER_POINT
@@ -407,15 +420,20 @@ def dedup_action(action, action_v2):
     return direction
 
 
-def get_case_action() -> int:
+def get_case_action() -> int:  # todo case điểm về 0
     val_pos = EVALUATE_MAP_ROAD[POS_PLAYER[0]][POS_PLAYER[1]]
-    print("pos", POS_PLAYER, "point :", val_pos)
-    if bfs_f(POS_PLAYER, [ROWS, COLS]):
+    print("pos", POS_PLAYER, "point pos:", val_pos)
+    if bfs_f(POS_PLAYER, [ROWS, COLS]) and EF_ENEMY["score"] > 0:
         # print("case 1")
         return 1
     if euclid_distance(POS_ENEMY, POS_PLAYER) <= 4:
         # print("case 2")
         return 1
+    if (EF_ENEMY["score"] <= 0 and EF_PLAYER["power"] > 1) or EF_ENEMY["score"] - EF_PLAYER["score"] >= 50:
+        for i in AroundRange.LV1.value:
+            if MAP[POS_PLAYER[0] + i[0]][POS_PLAYER[1] + i[1]] == 2:
+                return 1
+        return 7
     if val_pos != 0:
         # print("case 3")
         return 1
@@ -564,7 +582,7 @@ def a_star(start, target):
             return cr_status[3]
         for act in NextMoveZone.Z4.value:
             new_pos_player = [sum(i) for i in zip(cr_status[0], act)]
-            if new_pos_player in BOMB_POS_LOCK_MINMAX:
+            if new_pos_player in BOMB_POS_LOCK_BFS:
                 continue
 
             if MAP[new_pos_player[0]][new_pos_player[1]] in NO_DESTROY_LIST:
@@ -618,13 +636,13 @@ def next_pos_bfs(actions, cr_status, pos_list, size_map, queue: list):
         if MAP[new_pos_player[0]][new_pos_player[1]] in NO_LIST_BFS:
             # print("line 645", new_pos_player, MAP[new_pos_player[0]][new_pos_player[1]])
             continue
-        if new_pos_player in BOMB_POS_LOCK_MINMAX:
+        if new_pos_player in BOMB_POS_LOCK_BFS:
             continue
         if new_pos_player == POS_ENEMY:
             continue
         point = EVALUATE_MAP_ROAD[new_pos_player[0]][new_pos_player[1]]
         # print("line 650", cr_status, "->", new_pos_player, point, pos_list)
-        if point >= 25 and new_pos_player not in BOMB_POS_LOCK_MINMAX:  # not is_danger_bombs(new_pos_player, BOMBS):
+        if point >= 25 and new_pos_player not in BOMB_POS_LOCK_BFS:  # not is_danger_bombs(new_pos_player, BOMBS):
             end_status = deepcopy(cr_status)
             end_status[1].append(act)
             end_status[0] = new_pos_player
@@ -759,14 +777,14 @@ def destroy_point_with_lv(bomb, bomb_range) -> int:
                 value += 1000
                 break
             if [bomb["row"] + j[0], bomb["col"] + j[1]] == POS_PLAYER_EGG:
-                value -= 500
+                value -= 1000
                 break
     return value
 
 
 def check_bulk_around_egg(pos):
     if euclid_distance(pos, POS_ENEMY_EGG) <= 2:
-        return 700
+        return 1100
     elif euclid_distance(pos, POS_PLAYER_EGG) <= 2:
         return 0
     else:
@@ -801,7 +819,7 @@ def list_pos_bomb_with_lv(bomb, bomb_range) -> list:
                 continue
             if bomb["col"] + j[1] < 0 or bomb["col"] + j[1] >= COLS:
                 continue
-            if MAP[bomb["row"] + j[0]][bomb["col"] + j[1]] == 3:
+            if MAP[bomb["row"] + j[0]][bomb["col"] + j[1]] == 20:
                 continue
             if MAP[bomb["row"] + j[0]][bomb["col"] + j[1]] in LIST_NO_DES:
                 break
@@ -810,14 +828,19 @@ def list_pos_bomb_with_lv(bomb, bomb_range) -> list:
 
 
 REMAIN_TIME_LOCK = 600
-TIME_UNLOCK = 700
+TIME_UNLOCK = 300
 
 
 def get_list_pos_bomb_danger(bombs):
     list_pos = []
+    list_pos_bfs = []
     print("line 805:", bombs)
     for bomb in bombs:
         if bomb["remainTime"] > 900:
+            if bomb["playerId"] in PLAYER_ID:
+                list_pos_bfs += list_pos_bomb(EF_PLAYER["power"], bomb)
+            else:
+                list_pos_bfs += list_pos_bomb(EF_ENEMY["power"], bomb)
             continue
         if bomb["remainTime"] < REMAIN_TIME_LOCK:
             if bomb not in BOMBS_:
@@ -842,8 +865,10 @@ def get_list_pos_bomb_danger(bombs):
             list_pos += list_pos_bomb(EF_PLAYER["power"], bomb)
         else:
             list_pos += list_pos_bomb(EF_ENEMY["power"], bomb)
+    list_pos_bfs += list_pos
     print(list_pos)
-    return list_pos
+    print(list_pos_bfs)
+    return list_pos, list_pos_bfs
 
 
 def is_danger_bombs(position, bombs) -> bool:
@@ -869,6 +894,11 @@ def is_danger_bomb(position, bomb) -> bool:
     :return:
     """
     # print("check danger", position, bombs)
+    """
+    if bomb.get("remainTime", 0) > 1200:
+        print(bomb)
+        return False
+    """
     if bomb["playerId"] in PLAYER_ID:
         return is_pos_danger(EF_PLAYER["power"], bomb, position)
     else:
@@ -923,6 +953,8 @@ def val(position: Position, list_pos=None) -> int:
     global COUNT
     COUNT = COUNT + 1
     # print("count", COUNT, position)
+    if check_lock_enemy(position):
+        value += 400
     if position.bombs:
         for bomb in position.bombs:
             if is_danger_bomb(position.pos_player, bomb):
@@ -933,7 +965,7 @@ def val(position: Position, list_pos=None) -> int:
                 value += bomb_bonus(bomb) * 1.5
 
             if list_pos is not None and bomb.get("old", True):
-                #print("check pos bomb")
+                # print("check pos bomb")
                 # if list_pos == [[3, 4], [2, 4], [2, 4], [1, 4], [1, 5]]:
                 #    print(value)
                 for idx, x in enumerate(list_pos, start=1):
@@ -1008,6 +1040,21 @@ def check_pos_can_go(new_pos, position: Position):
     return True
 
 
+def check_lock_enemy(position: Position):
+    list_pos = [position.pos_player]
+    for bomb in position.bombs:
+        list_pos.append([bomb["row"], bomb["col"]])
+    idx = 0
+    for i in BombRange.LV1.value:
+        if [position.pos_enemy[0] + i[0], position.pos_enemy[1] + i[1]] in list_pos:
+            idx += 1
+        if MAP[position.pos_enemy[0] + i[0]][position.pos_enemy[0] + i[1]] in NO_LIST_BFS:
+            idx += 1
+    if idx >= 4:
+        return True
+    return False
+
+
 TMP_POSITION_OBJ: Position
 
 
@@ -1040,14 +1087,14 @@ def action_simulator(position: Position, act_list):
                     break
                 else:
                     new_pos_player = [sum(i) for i in zip(position_clone.pos_player, act)]
-                    print(position.pos_player, "->", new_pos_player)
+                    # print(position.pos_player, "->", new_pos_player)
                     position_clone.pos_player = new_pos_player
                     new_acts.append(act)
-                    pr_green(f"idx:{idx} {position_clone} point: {val(position=position_clone)}")
+                    # pr_green(f"idx:{idx} {position_clone} point: {val(position=position_clone)}")
                     if val(position=position_clone) >= -TELE_POINT and idx >= ACTION_PER_POINT + 1:
                         new_acts_v2 = deepcopy(new_acts)
                         check_point_v2 = True
-                        pr_yellow(f"{position_clone} point: {val(position=position_clone)}")
+                        # pr_yellow(f"{position_clone} point: {val(position=position_clone)}")
     print("line 1030", new_acts, new_acts_v2)
     return new_acts, new_acts_v2
 
@@ -1094,7 +1141,7 @@ def minimax_no_e(position: Position, zone: int) -> list:
                     new_pos_list = deepcopy(pos_list)
                     point_no_e, pos, move = max_val_no_e(new_position, actions, 1, new_pos_list, new_act_list)
                     if value < point_no_e:
-                        #print(f"1160 action:{act} level:{0} -{point_no_e, pos, move} yes")
+                        # print(f"1160 action:{act} level:{0} -{point_no_e, pos, move} yes")
                         value = point_no_e
                         act_list = move
                         pos_list = pos
@@ -1107,7 +1154,7 @@ def minimax_no_e(position: Position, zone: int) -> list:
                 case _:
                     # reposition
                     new_pos_player = [sum(i) for i in zip(position.pos_player, act)]
-                    #print(f"1100 action:{act} level:{0}")
+                    # print(f"1100 action:{act} level:{0}")
                     if new_pos_player in BOMB_POS_LOCK_MINMAX:
                         continue
                     if MAP[new_pos_player[0]][new_pos_player[1]] in NO_LIST_MAX:
@@ -1133,7 +1180,7 @@ def minimax_no_e(position: Position, zone: int) -> list:
                         new_act_list.append(act)
                         point_no_e, pos, move = max_val_no_e(new_position, actions, 1, new_pos_list, new_act_list)
                     if value <= point_no_e:
-                        #print(f"1190 action:{act} level:{0} point: {point_no_e}  {move} yes")
+                        # print(f"1190 action:{act} level:{0} point: {point_no_e}  {move} yes")
                         value = point_no_e
                         act_list = move
                         pos_list = pos
@@ -1154,7 +1201,7 @@ def max_val_no_e(position: Position, actions, level, pos_list: list, act_list):
             match act:
                 case [1, 1]:
                     if level <= DIF_H_NO_BOMB:
-                        #print(f"1210 {act_list} action:{act} level:{level} ")
+                        # print(f"1210 {act_list} action:{act} level:{level} ")
                         point_max_no_e, pos_l, move_l = bomb_action(position=position, actions=actions, level=level,
                                                                     list_pos=pos_list,
                                                                     list_move=act_list)
@@ -1162,9 +1209,9 @@ def max_val_no_e(position: Position, actions, level, pos_list: list, act_list):
                             value = point_max_no_e
                             move = move_l
                             pos = pos_l
-                        #print("1215 - end act", move, "point:", value, "level", level)
+                        # print("1215 - end act", move, "point:", value, "level", level)
                 case [0, 0]:
-                    #print(f"1150 {act_list} action:{act}, val: {value} level:{level} ")
+                    # print(f"1150 {act_list} action:{act}, val: {value} level:{level} ")
                     point_max_no_e = val(position, pos_list)
                     # print(point_max_no_e)
                     if value < point_max_no_e:
@@ -1174,14 +1221,14 @@ def max_val_no_e(position: Position, actions, level, pos_list: list, act_list):
                         new_move_list.append(act)
                         move = new_move_list
                         pos = new_pos_list
-                    #print("1225 - move end", move, "point:", val(position=position), "level", level)
+                    # print("1225 - move end", move, "point:", val(position=position), "level", level)
                 case _:
                     # reposition
-                    #print(f"1165 {act_list} action:{act} level:{level} ")
+                    # print(f"1165 {act_list} action:{act} level:{level} ")
                     point_max_no_e, pos_l, move_l = move_action(position=position, current_action=act, actions=actions,
                                                                 level=level,
                                                                 pos_list=pos_list, move_list=act_list)
-                    #print("1170 ", point_max_no_e, pos_l, move_l)
+                    # print("1170 ", point_max_no_e, pos_l, move_l)
                     if value <= point_max_no_e:
                         # print(f"1235 action:{act} level:{level} point: {point_max_no_e} {pos_l} {move_l}")
                         value = point_max_no_e
@@ -1227,7 +1274,7 @@ def move_action(position: Position, current_action, actions, level, pos_list, mo
     if level != H_NOE and current_action == [0, 0]:
         return MIN, pos_list, move_list
     new_pos_player = [sum(i) for i in zip(position.pos_player, current_action)]
-    #print("1210 ", new_pos_player)
+    # print("1210 ", new_pos_player)
     if new_pos_player in BOMB_POS_LOCK_MINMAX:  # and BOMB_PLAYER_ENABLE
         # print("move lock case 1")
         return MIN, pos_list, move_list
@@ -1259,11 +1306,11 @@ def move_action(position: Position, current_action, actions, level, pos_list, mo
     new_move_list.append(current_action)
 
     if level != H_NOE:
-        #print("moved ", current_action)
+        # print("moved ", current_action)
         return max_val_no_e(position=new_position, actions=actions, level=level + 1, pos_list=new_pos_list,
                             act_list=new_move_list)
     else:
-        #print("1240 - move end", new_move_list, "point:", val(position=new_position, list_pos=new_pos_list), "level",              level)
+        # print("1240 - move end", new_move_list, "point:", val(position=new_position, list_pos=new_pos_list), "level",              level)
         return val(position=new_position, list_pos=new_pos_list), new_pos_list, new_move_list
 
 
