@@ -10,10 +10,10 @@ from gst.model.position import Position
 from pmt.util import pr_yellow, pr_green, pr_red
 
 # global var
-URL = "http://localhost:1543/"  # 'http://192.168.0.101/'
-GAME_ID = "ccf50600-fd3c-41ed-98a1-4c2a255334ac"
+URL = 'http://192.168.0.101/'
+GAME_ID = "325bbfa3-9a7b-4373-8429-f7a2addf6bd6"
 
-PLAYER_ID = "player1-xxx"
+PLAYER_ID = "373895f5-dd72-4795-a393-935298f56c2c"
 # PLAYER_ID = "player1-xxx"
 
 # ENEMY_ID = "player=2-xxx"
@@ -357,8 +357,7 @@ def ticktack_handler(data):
     global TIME_POINT, TIME_POINT_OWN
     print(data["id"], "-", data.get("player_id", "no id"), "-", data["tag"], "-", data["timestamp"], "-", TIME_POINT)
 
-    print("pos now", data["map_info"]["players"][0]["id"], data["map_info"]["players"][0]["currentPosition"],
-          data["map_info"]["players"][1]["currentPosition"])
+    #print("pos now", data["map_info"]["players"][0]["id"], data["map_info"]["players"][0]["currentPosition"],data["map_info"]["players"][1]["currentPosition"])
     paste_player_data(data["map_info"]["players"])
     if data.get("player_id", "no id") in PLAYER_ID:
         TIME_POINT_OWN = data["timestamp"]
@@ -367,14 +366,14 @@ def ticktack_handler(data):
         TIME_POINT = data["timestamp"]
         COUNT += 1
         print("line 350: ", COUNT, " in ", ACTION_PER_POINT)
-    """"""
+    """
     if COUNT == ACTION_PER_POINT:
         pr_yellow("trigger case 1")
     elif data.get("player_id", "no id") in PLAYER_ID and data["timestamp"] - TIME_POINT_OWN > RANGE_TIME_OWN:
         pr_yellow("trigger case 2")
     elif data["timestamp"] - TIME_POINT > RANGE_TIME:
         pr_yellow("trigger case 3")
-
+    """
     if (COUNT == ACTION_PER_POINT
             or data.get("player_id", "no id") in PLAYER_ID and data["timestamp"] - TIME_POINT_OWN > RANGE_TIME_OWN
             or data["timestamp"] - TIME_POINT > RANGE_TIME):
@@ -390,6 +389,10 @@ def ticktack_handler(data):
         if action_case == 2 and action == [] and EF_ENEMY["score"] != 0:
             print("find egg")
             action = get_action(case=5)
+        print("action:", action)
+        if action_case == 7 and action == [] and EF_ENEMY["score"] != 0:
+            print("find egg")
+            action = get_action(case=2)
         print("action:", action)
         if action_case == 1:
             if TMP_POSITION_OBJ is not None:
@@ -439,7 +442,8 @@ def get_case_action() -> int:  # todo case điểm về 0
     if euclid_distance(POS_ENEMY, POS_PLAYER) <= 4:
         # print("case 2")
         return 1
-    if (EF_ENEMY["score"] <= 0 and EF_PLAYER["power"] > 1) or EF_ENEMY["score"] - EF_PLAYER["score"] >= 50:
+    if EF_PLAYER["power"] > 3 and EF_PLAYER["dragonEggDelay"] > 3:
+        # or (EF_PLAYER["score"] >=  and euclid_distance(POS_ENEMY, POS_PLAYER) <= 4)
         for i in AroundRange.LV1.value:
             if MAP[POS_PLAYER[0] + i[0]][POS_PLAYER[1] + i[1]] == 2:
                 return 1
@@ -629,7 +633,7 @@ def bfs(start: list, size_map: list, p_zone: int):
         begin_status = [start, []]  # current pos , action to pos
 
         point, pos_list, end_status = next_pos_bfs(actions, begin_status, pos_list, size_map, queue)
-        print("685", point, pos_list, end_status)
+        #print("685", point, pos_list, end_status)
         if point >= 25:
             # print("return", end_status[1])
             act_list = end_status[1]
